@@ -154,27 +154,28 @@ CREATE TABLE packages (
 -- 6. sessions (Customer service session lifecycle & snapshots)
 -- ------------------------------------------------------------
 CREATE TABLE sessions (
-    id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    package_id               UUID NOT NULL REFERENCES packages(id),
-    status                   session_status NOT NULL DEFAULT 'draft',
-    pin_hash                 VARCHAR(255) NOT NULL,
-    pin_plain                VARCHAR(6),
-    failed_pin_attempts      INT NOT NULL DEFAULT 0 CHECK (failed_pin_attempts >= 0),
-    is_locked                BOOLEAN NOT NULL DEFAULT false,
-    adult_guest_count        INT NOT NULL DEFAULT 0 CHECK (adult_guest_count >= 0),
-    child_guest_count        INT NOT NULL DEFAULT 0 CHECK (child_guest_count >= 0),
-    free_guest_count         INT NOT NULL DEFAULT 0 CHECK (free_guest_count >= 0),
-    adult_price_snapshot     NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (adult_price_snapshot >= 0),
-    child_price_snapshot     NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (child_price_snapshot >= 0),
-    free_price_snapshot      NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (free_price_snapshot >= 0),
+    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    package_id                UUID NOT NULL REFERENCES packages(id),
+    status                    session_status NOT NULL DEFAULT 'draft',
+    -- PIN stored as bcrypt hash (NFR-006); pin_plain removed - security risk
+    pin_hash                  VARCHAR(255) NOT NULL,
+    failed_pin_attempts       INT NOT NULL DEFAULT 0 CHECK (failed_pin_attempts >= 0),
+    is_locked                 BOOLEAN NOT NULL DEFAULT false,
+    adult_guest_count         INT NOT NULL DEFAULT 0 CHECK (adult_guest_count >= 0),
+    child_guest_count         INT NOT NULL DEFAULT 0 CHECK (child_guest_count >= 0),
+    free_guest_count          INT NOT NULL DEFAULT 0 CHECK (free_guest_count >= 0),
+    adult_price_snapshot      NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (adult_price_snapshot >= 0),
+    child_price_snapshot      NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (child_price_snapshot >= 0),
+    free_price_snapshot       NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (free_price_snapshot >= 0),
     duration_minutes_snapshot INT NOT NULL DEFAULT 90 CHECK (duration_minutes_snapshot > 0),
-    guest_count_locked_at    TIMESTAMPTZ,
-    started_at               TIMESTAMPTZ,
-    expires_at               TIMESTAMPTZ,
-    closed_at                TIMESTAMPTZ,
-    created_by               UUID NOT NULL REFERENCES profiles(id),
-    created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+    guest_count_locked_at     TIMESTAMPTZ,
+    package_price_locked_at   TIMESTAMPTZ,              -- set by trigger on draft→active (SRS §10.3, C-02)
+    started_at                TIMESTAMPTZ,
+    expires_at                TIMESTAMPTZ,
+    closed_at                 TIMESTAMPTZ,
+    created_by                UUID NOT NULL REFERENCES profiles(id),
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at                TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ------------------------------------------------------------
@@ -303,7 +304,8 @@ CREATE TABLE orders (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id   UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     order_number VARCHAR(30) NOT NULL UNIQUE,
-    order_source VARCHAR(20) NOT NULL DEFAULT 'customer_qr',
+    order_source VARCHAR(20) NOT NULL DEFAULT 'customer_qr'
+        CHECK (order_source IN ('customer_qr', 'staff')),
     created_by   UUID REFERENCES profiles(id) ON DELETE SET NULL,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -350,7 +352,8 @@ CREATE TABLE bills (
     discount_approved_by     UUID REFERENCES profiles(id) ON DELETE SET NULL,
     total_amount             NUMERIC(10,2) NOT NULL CHECK (total_amount >= 0),
     vat_amount               NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (vat_amount >= 0),
-    status                   VARCHAR(20) NOT NULL DEFAULT 'unpaid',
+    status                   VARCHAR(20) NOT NULL DEFAULT 'unpaid'
+        CHECK (status IN ('unpaid', 'paid')),
     created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
     paid_at                  TIMESTAMPTZ
 );
@@ -376,7 +379,8 @@ CREATE TABLE payments (
     bill_id        UUID NOT NULL UNIQUE REFERENCES bills(id),
     payment_method payment_method NOT NULL,
     amount_paid    NUMERIC(10,2) NOT NULL CHECK (amount_paid >= 0),
-    status         VARCHAR(20) NOT NULL DEFAULT 'settled',
+    status         VARCHAR(20) NOT NULL DEFAULT 'settled'
+        CHECK (status IN ('settled')),
     verified_by    UUID NOT NULL REFERENCES profiles(id),
     verified_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -462,12 +466,15 @@ CREATE UNIQUE INDEX idx_unique_order_item_consumption
 -- 27. usage_rates (Estimated consumption rates per guest - FR-035)
 -- ------------------------------------------------------------
 CREATE TABLE usage_rates (
-    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    package_id                UUID NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
-    ingredient_id             UUID NOT NULL REFERENCES ingredients(id) ON DELETE CASCADE,
-    estimated_grams_per_adult NUMERIC(10,2) NOT NULL DEFAULT 0.00,
-    estimated_grams_per_child NUMERIC(10,2) NOT NULL DEFAULT 0.00,
-    updated_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+    id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    package_id                  UUID NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
+    ingredient_id               UUID NOT NULL REFERENCES ingredients(id) ON DELETE CASCADE,
+    estimated_grams_per_adult   NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+    estimated_grams_per_child   NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+    -- Free-tier guests (<120 cm) typically consume a negligible amount;
+    -- default is 0 but kept for completeness (M-02 resolution).
+    estimated_grams_per_free    NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+    updated_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (package_id, ingredient_id)
 );
 
@@ -479,7 +486,8 @@ CREATE TABLE head_usage_estimates (
     session_id         UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     ingredient_id      UUID NOT NULL REFERENCES ingredients(id),
     estimated_quantity NUMERIC(12,3) NOT NULL,
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (session_id, ingredient_id)       -- G-03: prevent duplicate estimation rows
 );
 
 -- ============================================================
@@ -532,10 +540,11 @@ BEGIN
         END IF;
     END IF;
 
-    -- When transitioning from draft to active: lock time, start timer
+    -- Also set package_price_locked_at when transitioning from draft to active (C-02 / SRS §10.3)
     IF OLD.status = 'draft' AND NEW.status = 'active' THEN
         NEW.started_at = COALESCE(NEW.started_at, now());
         NEW.guest_count_locked_at = now();
+        NEW.package_price_locked_at = now();
         NEW.expires_at = NEW.started_at + (NEW.duration_minutes_snapshot || ' minutes')::interval;
     END IF;
 
@@ -573,6 +582,24 @@ BEFORE INSERT OR UPDATE ON leftover_records
 FOR EACH ROW EXECUTE FUNCTION fn_calc_leftover_penalty();
 
 -- ------------------------------------------------------------
+-- 5. Auto-calculate VAT on bills (C-03 / BR-018)
+-- Formula: vat_amount = ROUND(total_amount * 7 / 107, 2)
+-- Inclusive VAT 7% — extracted from total, not added on top.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION fn_calc_bill_vat()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Recalculate vat_amount whenever total_amount changes
+    NEW.vat_amount := ROUND(NEW.total_amount * 7.0 / 107.0, 2);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_calc_bill_vat
+BEFORE INSERT OR UPDATE OF total_amount ON bills
+FOR EACH ROW EXECUTE FUNCTION fn_calc_bill_vat();
+
+-- ------------------------------------------------------------
 -- 5. Deduct Stock on Kitchen Order Item Acceptance (FR-033, BR-011)
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION fn_deduct_stock_on_accepted()
@@ -585,7 +612,11 @@ DECLARE
 BEGIN
     -- Only trigger when status transitions to 'accepted'
     IF OLD.status = 'submitted' AND NEW.status = 'accepted' THEN
-        v_actor := COALESCE(auth.uid(), NEW.cancelled_by);
+        -- C-01 fix: require authenticated actor; do not fall back to cancelled_by
+        v_actor := auth.uid();
+        IF v_actor IS NULL THEN
+            RAISE EXCEPTION 'Kitchen acceptance requires an authenticated user (auth.uid() is NULL).';
+        END IF;
 
         FOR rec IN
             SELECT mi.ingredient_id, mi.quantity_required, i.current_stock
@@ -624,7 +655,7 @@ BEGIN
                 -v_qty_needed,
                 v_new_stock,
                 'Kitchen order accepted: ' || NEW.id,
-                COALESCE(v_actor, '00000000-0000-0000-0000-000000000000'::UUID)
+                v_actor          -- C-01: always a valid authenticated UUID
             );
         END LOOP;
     END IF;
@@ -635,6 +666,28 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE TRIGGER trg_deduct_stock_on_accepted
 AFTER UPDATE OF status ON order_items
 FOR EACH ROW EXECUTE FUNCTION fn_deduct_stock_on_accepted();
+
+-- ------------------------------------------------------------
+-- 7. Revoke QR Tokens when Session closes (C-04 / NFR-008 / BR-030 / OI-012)
+-- All active tokens for the session become invalid immediately.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION fn_revoke_qr_on_session_close()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.status != 'closed' AND NEW.status = 'closed' THEN
+        UPDATE qr_access_tokens
+        SET is_revoked = true,
+            expires_at = now()
+        WHERE session_id = NEW.id
+          AND is_revoked = false;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER trg_revoke_qr_on_session_close
+AFTER UPDATE OF status ON sessions
+FOR EACH ROW EXECUTE FUNCTION fn_revoke_qr_on_session_close();
 
 -- ------------------------------------------------------------
 -- 6. Table Status Synchronization (A2/BR-038)

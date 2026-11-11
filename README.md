@@ -128,41 +128,62 @@ KURO/
 
 ---
 
-## 🚀 การเริ่มต้นใช้งานสำหรับนักพัฒนา (Getting Started)
+## 🚀 การเริ่มต้นใช้งานและการรันโปรเจกต์ (Getting Started & Development Guide)
 
-### 1. ติดตั้ง Dependencies
+### 👥 สำหรับเพื่อนร่วมทีมใหม่ (Team Onboarding in 3 Steps)
 
+หากเพิ่ง Clone โปรเจกต์ลงเครื่องใหม่ ให้ทำตาม 3 ขั้นตอนนี้เพื่อเปิดใช้งานได้ทันที:
+
+#### ขั้นตอนที่ 1: ติดตั้ง Dependencies
+เปิด Terminal ในโฟลเดอร์โปรเจกต์แล้วรัน:
 ```bash
 npm install
 ```
 
-### 2. ตั้งค่าตัวแปรสภาพแวดล้อม (Environment Variables)
+#### ขั้นตอนที่ 2: ตั้งค่า Environment Variables (`.env.local`)
+โปรเจกต์มีไฟล์แม่แบบ [`.env.example`](.env.example) เตรียมไว้ให้แล้ว ให้คัดลอกเป็น `.env.local`:
 
-สร้างไฟล์ `.env.local` ในรูทของโปรเจกต์:
+* **บน Windows PowerShell:**
+  ```powershell
+  Copy-Item .env.example .env.local
+  ```
+* **บน macOS / Linux / Git Bash:**
+  ```bash
+  cp .env.example .env.local
+  ```
 
-```env
-NEXT_PUBLIC_SUPABASE_URL=your-supabase-project-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-```
+> [!NOTE]
+> ในไฟล์ `.env.example` ได้ใส่ URL และ Publishable Key ของโปรเจกต์ Supabase ส่วนกลางไว้ให้แล้ว เพื่อนร่วมทีมสามารถใช้รันได้ทันทีโดยไม่ต้องไปกดสร้างโปรเจกต์ใหม่บน Supabase!
 
-### 3. เตรียมฐานข้อมูล (Database Migration)
-
-นำไฟล์ [`supabase/migrations/001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql) ไปรันใน **Supabase SQL Editor** หรือใช้ Supabase CLI:
-
-```bash
-npx supabase db push
-```
-
-### 4. สร้าง TypeScript Types (ถ้าต้องการ)
-
-```bash
-npx supabase gen types typescript --local > types/database.types.ts
-```
-
-### 5. รันเซิร์ฟเวอร์สำหรับการพัฒนา (Development Server)
-
+#### ขั้นตอนที่ 3: รันโปรเจกต์สำหรับการพัฒนา (Development Mode)
 ```bash
 npm run dev
 ```
+เปิดเบราว์เซอร์ไปที่: 👉 [**http://localhost:3000**](http://localhost:3000)
 
-เปิดบราวเซอร์ไปที่ [http://localhost:3000](http://localhost:3000) เพื่อเข้าใช้งานระบบ
+---
+
+### 🛠️ คำสั่งที่ใช้บ่อยในโปรเจกต์ (Available Scripts)
+
+| คำสั่ง | หน้าที่การทำงาน | การใช้งาน |
+| :--- | :--- | :--- |
+| `npm run dev` | รันเซิร์ฟเวอร์แบบ Hot-reload สำหรับเขียนโค้ด | พัฒนาฟีเจอร์ประจำวัน (พอร์ต 3000) |
+| `npm run build` | บิลด์โค้ดโปรเจกต์สำหรับ Production | ตรวจสอบ Syntax Error ก่อนส่งงาน |
+| `npm run start` | รันเซิร์ฟเวอร์แบบ Production หลังผ่านการ build | จำลองการทำงาน Production จริง |
+| `npm run lint` | ตรวจสอบ Code Quality และ Style ตาม ESLint | ตรวจสอบความเรียบร้อยของโค้ด |
+
+---
+
+### 💾 การจัดการฐานข้อมูล Supabase (Database Setup & Management)
+
+ฐานข้อมูลของโปรเจกต์นี้ทำงานบน **Supabase PostgreSQL** โดยมีตารางทั้งหมด 28 ตาราง:
+
+1. **สคริปต์ Master Schema:** อยู่ที่ [`supabase/migrations/001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql)
+2. **การอัปเดตฐานข้อมูลบน Cloud:**
+   - เข้าสู่ [Supabase Dashboard](https://supabase.com/dashboard) โครงการ **KURO**
+   - ไปที่เมนู **SQL Editor** วางคำสั่งแล้วกด **Run**
+3. **การเข้าถึงฐานข้อมูลในโค้ด JavaScript:**
+   - **ฝั่ง Client / Browser:** เรียกใช้ `createClient()` จาก `@/lib/supabase/client`
+   - **ฝั่ง Server Actions / Pages:** เรียกใช้ `await createClient()` จาก `@/lib/supabase/server`
+   - **ฝั่ง Admin / Service Role:** เรียกใช้ `createAdminClient()` จาก `@/lib/supabase/admin`
+

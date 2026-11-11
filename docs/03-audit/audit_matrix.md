@@ -72,9 +72,27 @@
 
 ---
 
-## 6. สถานะการส่งมอบงานและการดำเนินการถัดไป (Delivery Status & Next Steps)
+## 6. บันทึกผลการตรวจทานเชิงลึกก่อนเริ่มเขียนโค้ด (Pre-Implementation Deep Audit)
 
-1. [x] **สร้างไฟล์ Supabase Migration Script (`001_initial_schema.sql`):** ครบถ้วน 28 ตาราง, Enums, Triggers ล็อก Snapshot, และ RLS Policies ทุก Role
-2. [x] **สร้างเอกสาร `agent.md`:** คู่มือสถาปัตยกรรม (Next.js 15 Clean Architecture), โครงสร้างโฟลเดอร์, และ Prompting Checklist
-3. [ ] **ขั้นตอนถัดไปสำหรับการพัฒนา (Implementation Phase):** เริ่มพัฒนา Next.js 15 App Router ตาม Checklist ใน `agent.md` (เริ่มจาก Task 1 & 2: Setup Database Types & Staff Auth)
+จากการ Audit รอบสุดท้ายก่อนเริ่มพัฒนา ได้ดำเนินการตรวจสอบและปรับปรุงเพิ่มเติมดังนี้:
+
+| รหัส | ระดับ | ปัญหาที่พบ | ผลการแก้ไข (Resolution) |
+|:---:|:---:|---|---|
+| **C-01** | 🔴 Critical | ฟังก์ชันตัดสต็อกครัว `fn_deduct_stock_on_accepted` ใช้ `v_actor := COALESCE(auth.uid(), NEW.cancelled_by)` ซึ่งผิด Context | แก้ไขให้ใช้ `auth.uid()` และมี Check ไม่ให้ดำเนินการหากผู้ใช้ไม่ได้ผ่านการพิสูจน์ตัวตน |
+| **C-02** | 🔴 Critical | Trigger `fn_protect_session_snapshot` ไม่ได้บันทึก `package_price_locked_at` ตอน `draft → active` | เพิ่มคำสั่งให้บันทึก `NEW.package_price_locked_at = now()` พร้อมกับ `guest_count_locked_at` |
+| **C-03** | 🔴 Critical | ตาราง `bills` ไม่มีกลไกคำนวณ VAT 7% Inclusive อัตโนมัติในระดับ Database | เพิ่ม Trigger `fn_calc_bill_vat` คำนวณ `vat_amount = ROUND(total_amount * 7.0 / 107.0, 2)` ทุกครั้งที่ total_amount เปลี่ยนแปลง |
+| **C-04** | 🔴 Critical | ไม่มีกลไกเพิกถอน Token อัตโนมัติเมื่อ Session ปิด | เพิ่ม Trigger `fn_revoke_qr_on_session_close` ทำการเพิกถอน Token ทันทีเมื่อ Session กลายเป็น `closed` |
+| **M-01** | 🟡 Major | ฟิลด์ `pin_plain` ในตาราง `sessions` สุ่มเสี่ยงเรื่องความปลอดภัย | ลบฟิลด์ `pin_plain` ออกจาก Schema โดยให้คงไว้เฉพาะ `pin_hash` ตามข้อกำหนด NFR-006 |
+| **M-02** | 🟡 Major | ตาราง `usage_rates` ขาดการกำหนดค่าประมาณการสำหรับลูกค้าประเภทฟรี | เพิ่มคอลัมน์ `estimated_grams_per_free` พร้อมคำอธิบายใน Data Dictionary |
+| **M-04** | 🟡 Major | ฟิลด์ `orders.order_source` ขาด CHECK Constraint | เพิ่ม `CHECK (order_source IN ('customer_qr', 'staff'))` ใน DDL |
+| **M-05** | 🟡 Major | ฟิลด์ `bills.status` และ `payments.status` ขาด CHECK Constraint | เพิ่ม CHECK กำกับค่าที่เป็นไปได้ (`unpaid`, `paid` สำหรับ bills และ `settled` สำหรับ payments) |
+| **G-03** | 🟢 Minor | ตาราง `head_usage_estimates` ไม่มี Unique Constraint | เพิ่ม `UNIQUE (session_id, ingredient_id)` ป้องกันข้อมูลประมาณการซ้ำซ้อน |
+
+---
+
+## 7. สถานะการส่งมอบงานและการดำเนินการถัดไป (Delivery Status & Next Steps)
+
+1. [x] **สร้างไฟล์ Supabase Migration Script (`001_initial_schema.sql`):** ครบถ้วน 28 ตาราง, Enums, Triggers ล็อก Snapshot/VAT/QR Token Revoke, และ RLS Policies ทุก Role
+2. [x] **สร้างและปรับปรุงเอกสาร `agent.md`, `SRS.md`, `data_dictionary.md`, `audit_matrix.md`, `README.md`:** สอดคล้องกัน 100% ไม่มีข้อขัดแย้ง
+3. [ ] **ขั้นตอนถัดไปสำหรับการพัฒนา (Implementation Phase):** เริ่มพัฒนา Next.js 16 App Router ตาม Checklist ใน `agent.md` (เริ่มจาก Task 1: Setup Supabase Client Helpers & Constants)
 

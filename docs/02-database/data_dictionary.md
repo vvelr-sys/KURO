@@ -107,7 +107,6 @@
 | `package_id` | UUID | NO | - | FK -> `packages.id` (แพ็กเกจที่เลือก) |
 | `status` | VARCHAR(20) | NO | `'draft'` | สถานะ: `draft`, `active`, `expired`, `closing`, `billed`, `closed` |
 | `pin_hash` | VARCHAR(255) | NO | - | แฮชของ PIN 6 หลักสำหรับรอบบริการนี้ (NFR-006) |
-| `pin_plain` | VARCHAR(6) | YES | - | รหัส PIN 6 หลักสำหรับแสดงผลให้ Staff ตอนเปิดรอบ (ลบ/ซ่อนได้) |
 | `failed_pin_attempts` | INT | NO | 0 | จำนวนครั้งที่กรอก PIN ผิดสะสม |
 | `is_locked` | BOOLEAN | NO | `false` | ถูกล็อกเมื่อกรอก PIN ผิดเกิน 5 ครั้ง (FR-016) |
 | `adult_guest_count` | INT | NO | 0 | Snapshot จำนวนผู้ใหญ่ (CHECK `>= 0`) |
@@ -117,7 +116,8 @@
 | `child_price_snapshot` | NUMERIC(10,2) | NO | 0.00 | Snapshot ราคาเด็ก ณ เวลาเปิด Session |
 | `free_price_snapshot` | NUMERIC(10,2) | NO | 0.00 | Snapshot ราคาฟรี (0.00) |
 | `duration_minutes_snapshot` | INT | NO | 90 | Snapshot ระยะเวลารับประทาน (นาที) |
-| `guest_count_locked_at` | TIMESTAMPTZ | YES | - | เวลาที่ล็อก Snapshot (เมื่อเปลี่ยนสถานะเป็น `active`) |
+| `guest_count_locked_at` | TIMESTAMPTZ | YES | - | เวลาที่ล็อก Snapshot จำนวนลูกค้า (เมื่อเปลี่ยนสถานะเป็น `active`) |
+| `package_price_locked_at` | TIMESTAMPTZ | YES | - | เวลาที่ล็อก Snapshot ราคาแพ็กเกจ (set โดย Trigger พร้อมกับ `guest_count_locked_at`) |
 | `started_at` | TIMESTAMPTZ | YES | - | เวลาเริ่มเปิดบริการจริงและเริ่มนับเวลาถอยหลัง |
 | `expires_at` | TIMESTAMPTZ | YES | - | เวลาหมดรอบบริการคำนวณจาก `started_at + duration_minutes` |
 | `closed_at` | TIMESTAMPTZ | YES | - | เวลาปิดรอบบริการ (หลังชำระเงินปิดบิล) |
@@ -125,7 +125,7 @@
 | `created_at` | TIMESTAMPTZ | NO | `now()` | วันเวลาที่สร้าง |
 | `updated_at` | TIMESTAMPTZ | NO | `now()` | วันเวลาที่แก้ไขล่าสุด |
 
-* **Trigger Enforcement:** มี PostgreSQL Trigger ป้องกันการ `UPDATE` คอลัมน์ Snapshot (`adult_guest_count`, `child_guest_count`, `free_guest_count`, `adult_price_snapshot`, `child_price_snapshot`) เมื่อ `status != 'draft'`
+* **Trigger Enforcement:** มี PostgreSQL Trigger `fn_protect_session_snapshot` ป้องกันการ UPDATE คอลัมน์ Snapshot (`adult_guest_count`, `child_guest_count`, `free_guest_count`, `adult_price_snapshot`, `child_price_snapshot`, `free_price_snapshot`, `duration_minutes_snapshot`) เมื่อ `status != 'draft'`; และ SET `guest_count_locked_at`, `package_price_locked_at`, `started_at`, `expires_at` อัตโนมัติเมื่อเปลี่ยนสถานะจาก `draft → active`
 
 ### 2.4 `session_tables`
 ตารางความสัมพันธ์การผูกโต๊ะกับรอบบริการและประวัติการย้ายโต๊ะ (FR-011, OI-007)
@@ -451,6 +451,7 @@
 | `ingredient_id` | UUID | NO | - | FK -> `ingredients.id` ON DELETE CASCADE |
 | `estimated_grams_per_adult` | NUMERIC(10,2)| NO | 0.00 | ปริมาณประมาณการที่ผู้ใหญ่ 1 คนบริโภค (กรัม) |
 | `estimated_grams_per_child` | NUMERIC(10,2)| NO | 0.00 | ปริมาณประมาณการที่เด็ก 1 คนบริโภค (กรัม) |
+| `estimated_grams_per_free` | NUMERIC(10,2)| NO | 0.00 | ปริมาณประมาณการที่ลูกค้าฟรี (<120 ซม.) บริโภค; ค่าปกติ = 0.00 เพราะลูกค้าประเภทนี้บริโภคน้อยมาก แต่เก็บไว้ให้ครบ 3 ประเภทเพื่อความสมบูรณ์ |
 | `updated_at` | TIMESTAMPTZ | NO | `now()` | วันเวลาที่แก้ไขล่าสุด |
 
 ### 6.6 `head_usage_estimates`
@@ -462,6 +463,8 @@
 | `id` | UUID | NO | `gen_random_uuid()` | Primary Key |
 | `session_id` | UUID | NO | - | FK -> `sessions.id` ON DELETE CASCADE |
 | `ingredient_id` | UUID | NO | - | FK -> `ingredients.id` |
-| `estimated_quantity` | NUMERIC(12,3) | NO | - | ปริมาณประมาณการรวมของ Session (`adult * rate + child * rate`) |
+| `estimated_quantity` | NUMERIC(12,3) | NO | - | ปริมาณประมาณการรวมของ Session (`adult_count × rate_adult + child_count × rate_child + free_count × rate_free`) |
 | `created_at` | TIMESTAMPTZ | NO | `now()` | วันเวลาที่คำนวณ |
+
+* **Unique Constraint:** `UNIQUE (session_id, ingredient_id)` — ป้องกันการ INSERT ค่าประมาณซ้ำสำหรับ Session + วัตถุดิบคู่เดิม
 

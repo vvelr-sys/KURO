@@ -43,7 +43,8 @@
   | `billed` | ออกบิลเดี่ยวแล้ว รอ Cashier รับเงิน | บิล Locked ห้ามแก้ |
   | `closed` | Cashier รับเงินและปิดบิลสำเร็จ | โต๊ะเปลี่ยนเป็น `cleaning` |
 
-* **ห้ามแก้ไขจำนวนลูกค้าหรือราคาต่อหัวหลังเปิดรอบ:** เมื่อ Session เปลี่ยนสถานะจาก `draft` เข้าสู่ `active` จำนวนลูกค้า (`adult_guest_count`, `child_guest_count`, `free_guest_count`) และราคา Snapshot (`adult_price_snapshot`, `child_price_snapshot`, **`free_price_snapshot`**) จะถูกล็อกทันที ห้ามสร้าง API endpoint หรือ UI ที่ยอมให้แก้ไขค่าเหล่านี้ย้อนหลัง
+* **ห้ามแก้ไขจำนวนลูกค้าหรือราคาต่อหัวหลังเปิดรอบ:** เมื่อ Session เปลี่ยนสถานะจาก `draft` เข้าสู่ `active` จำนวนลูกค้า (`adult_guest_count`, `child_guest_count`, `free_guest_count`) และราคา Snapshot (`adult_price_snapshot`, `child_price_snapshot`, **`free_price_snapshot`**, `duration_minutes_snapshot`) จะถูกล็อกทันทีโดย PostgreSQL Trigger ห้ามสร้าง API endpoint หรือ UI ที่ยอมให้แก้ไขค่าเหล่านี้ย้อนหลัง
+* **ล็อก Timestamp คู่กัน:** Trigger จะ SET `guest_count_locked_at = now()` **และ** `package_price_locked_at = now()` พร้อมกันเมื่อ `draft → active` — ทั้งสองฟิลด์ต้องมีค่าเสมอเมื่อ Session เป็น `active` ขึ้นไป
 * **นับเวลาถอยหลัง:** เริ่มนับทันทีเมื่อเปลี่ยนเป็น `active` (`started_at = now()`, `expires_at = started_at + duration_minutes_snapshot`)
 
 ### 2.2 การจัดการโต๊ะและรอบบริการ (A2, BR-038)
@@ -66,6 +67,15 @@
 * ชั่งเฉพาะเนื้อสัตว์ที่รับประทานได้และเหลือจริง (ไม่รวมกระดูก/เปลือก)
 * อัตราค่าปรับ: **100 บาทต่อทุก 100 กรัม** ปัดเศษขึ้นเป็นหน่วย 100 กรัม (`CEIL(weight_grams / 100.0) * 100.00`)
 * **หนึ่ง Session มีบิลเดียว และชำระเต็มจำนวนครั้งเดียว** (`bills` 1:1 กับ `sessions`, `payments` 1:1 กับ `bills`)
+
+### 2.6 การชำระเงินและบันทึกความพยายาม (FR-043, OI-020, A7)
+* รองรับช่องทาง `cash` และ `promptpay`; Cashier ตรวจหลักฐาน PromptPay ด้วยตนเองและกดยืนยันใน POS
+* **ความพยายามที่ไม่สำเร็จ** (สลิปไม่ถูกต้อง, ยอดไม่ตรง) ให้บันทึกลง `payment_attempts` ไม่ใช่ใน `payments` — เพื่อไม่กระทบ UNIQUE Constraint ของ `payments.bill_id`
+* เมื่อชำระสำเร็จ บันทึกลง `payments` ครั้งเดียว พร้อมระบุ `verified_by` (Cashier UUID) และ `verified_at`
+
+### 2.7 การเพิกถอน QR Token อัตโนมัติ (NFR-008, BR-030, OI-012)
+* PostgreSQL Trigger `fn_revoke_qr_on_session_close` จะ SET `qr_access_tokens.is_revoked = true` และ `expires_at = now()` **ทันที** เมื่อ `sessions.status` เปลี่ยนเป็น `closed`
+* Application Layer **ต้องตรวจ `is_revoked = false`** ทุกครั้งที่ลูกค้าใช้ Token สั่งอาหาร (อย่า trust token ที่ยังไม่หมดอายุตาม `expires_at` อย่างเดียว)
 
 ---
 
