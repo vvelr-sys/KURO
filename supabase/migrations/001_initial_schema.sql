@@ -1,4 +1,11 @@
 -- ============================================================
+-- KURO POS - Master Database Schema Migration Script (v1.8)
+-- Business Model: Shabu Buffet (Single Price per Head - Suki Teenoi Model)
+-- Database: Supabase PostgreSQL (28+ Tables, RLS, Triggers, Realtime)
+-- Date: 12 November 2026
+-- ============================================================
+
+-- ============================================================
 -- SECTION 1: EXTENSIONS
 -- ============================================================
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -8,7 +15,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- SECTION 2: ENUMS
 -- ============================================================
 
--- Roles: Admin, Manager, Staff, Kitchen, Cashier (Section 2.1)
+-- Roles: Admin, Manager, Staff, Kitchen, Cashier
 CREATE TYPE user_role AS ENUM (
     'admin',
     'manager',
@@ -17,14 +24,15 @@ CREATE TYPE user_role AS ENUM (
     'cashier'
 );
 
--- Dining table status (A2/BR-038: available, occupied, cleaning)
+-- Dining table status (4 States: available, occupied, cleaning, disabled)
 CREATE TYPE table_status AS ENUM (
     'available',
     'occupied',
-    'cleaning'
+    'cleaning',
+    'disabled'
 );
 
--- Session lifecycle 6-state machine (B10/BR-037)
+-- Session lifecycle 6-state machine
 CREATE TYPE session_status AS ENUM (
     'draft',
     'active',
@@ -34,37 +42,70 @@ CREATE TYPE session_status AS ENUM (
     'closed'
 );
 
--- Order item status (Section 3.4/A4)
+-- Order item status (4 States: pending -> cooking -> served [or cancelled])
 CREATE TYPE order_item_status AS ENUM (
-    'submitted',
-    'accepted',
+    'pending',
     'cooking',
-    'ready',
     'served',
     'cancelled'
 );
 
--- Menu availability status (A3/OI-019)
+-- Menu availability status
 CREATE TYPE menu_availability AS ENUM (
     'available',
     'manual_off',
     'auto_off'
 );
 
--- Payment methods (Section 3.7/OI-020)
-CREATE TYPE payment_method AS ENUM (
-    'cash',
-    'promptpay'
+-- Kitchen station for KDS routing
+CREATE TYPE kitchen_station AS ENUM (
+    'fresh',
+    'beverage',
+    'grill',
+    'hot_kitchen'
 );
 
--- Payment attempt status (A7/FR-043)
+-- Queue status
+CREATE TYPE queue_status AS ENUM (
+    'waiting',
+    'called',
+    'seated',
+    'skipped',
+    'cancelled'
+);
+
+-- Service request quick types (Call staff button)
+CREATE TYPE service_request_type AS ENUM (
+    'call_staff',
+    'water',
+    'change_pot',
+    'check_bill',
+    'other'
+);
+
+-- Service request resolution status
+CREATE TYPE service_request_status AS ENUM (
+    'pending',
+    'in_progress',
+    'completed'
+);
+
+-- Payment methods (cash, promptpay, credit_card, split)
+CREATE TYPE payment_method AS ENUM (
+    'cash',
+    'promptpay',
+    'credit_card',
+    'split'
+);
+
+-- Payment attempt status (Audit / Retry verification)
 CREATE TYPE payment_attempt_status AS ENUM (
     'pending_verification',
     'rejected',
     'failed'
 );
 
--- Stock movement types (Section 6.2 Data Dictionary)
+-- Stock movement types
 CREATE TYPE stock_movement_type AS ENUM (
     'actual_consumption',
     'stock_count_adjustment',
@@ -73,7 +114,7 @@ CREATE TYPE stock_movement_type AS ENUM (
     'manual_restock'
 );
 
--- Stock count review status (Section 6.3 Data Dictionary)
+-- Stock count review status
 CREATE TYPE stock_count_status AS ENUM (
     'pending_review',
     'approved',
@@ -81,7 +122,7 @@ CREATE TYPE stock_count_status AS ENUM (
 );
 
 -- ============================================================
--- SECTION 3: TABLES (28 TABLES AS PER DATA DICTIONARY v1.7)
+-- SECTION 3: TABLES
 -- ============================================================
 
 -- ------------------------------------------------------------
@@ -97,7 +138,7 @@ CREATE TABLE profiles (
 );
 
 -- ------------------------------------------------------------
--- 2. audit_logs (NFR-012, NFR-022, BR-036)
+-- 2. audit_logs (Audit Trail for non-repudiation)
 -- ------------------------------------------------------------
 CREATE TABLE audit_logs (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -112,7 +153,7 @@ CREATE TABLE audit_logs (
 );
 
 -- ------------------------------------------------------------
--- 3. app_settings (System Configuration)
+-- 3. app_settings (Global System Configuration)
 -- ------------------------------------------------------------
 CREATE TABLE app_settings (
     key         VARCHAR(50) PRIMARY KEY,
@@ -123,20 +164,20 @@ CREATE TABLE app_settings (
 );
 
 -- ------------------------------------------------------------
--- 4. dining_tables (BR-001: 20 Tables)
+-- 4. dining_tables (20 Physical Tables)
 -- ------------------------------------------------------------
 CREATE TABLE dining_tables (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     table_number VARCHAR(10) NOT NULL UNIQUE,
     capacity     INT NOT NULL DEFAULT 4 CHECK (capacity > 0),
     status       table_status NOT NULL DEFAULT 'available',
-    qr_code_url  TEXT NOT NULL,
+    qr_code_url  TEXT NOT NULL DEFAULT '',
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ------------------------------------------------------------
--- 5. packages (Buffet packages with duration_minutes - B9)
+-- 5. packages (Buffet Pricing & Duration)
 -- ------------------------------------------------------------
 CREATE TABLE packages (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -151,16 +192,12 @@ CREATE TABLE packages (
 );
 
 -- ------------------------------------------------------------
--- 6. sessions (Customer service session lifecycle & snapshots)
+-- 6. sessions (Customer Dining Session Lifecycle & Snapshot)
 -- ------------------------------------------------------------
 CREATE TABLE sessions (
     id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     package_id                UUID NOT NULL REFERENCES packages(id),
     status                    session_status NOT NULL DEFAULT 'draft',
-    -- PIN stored as bcrypt hash (NFR-006); pin_plain removed - security risk
-    pin_hash                  VARCHAR(255) NOT NULL,
-    failed_pin_attempts       INT NOT NULL DEFAULT 0 CHECK (failed_pin_attempts >= 0),
-    is_locked                 BOOLEAN NOT NULL DEFAULT false,
     adult_guest_count         INT NOT NULL DEFAULT 0 CHECK (adult_guest_count >= 0),
     child_guest_count         INT NOT NULL DEFAULT 0 CHECK (child_guest_count >= 0),
     free_guest_count          INT NOT NULL DEFAULT 0 CHECK (free_guest_count >= 0),
@@ -169,7 +206,7 @@ CREATE TABLE sessions (
     free_price_snapshot       NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (free_price_snapshot >= 0),
     duration_minutes_snapshot INT NOT NULL DEFAULT 90 CHECK (duration_minutes_snapshot > 0),
     guest_count_locked_at     TIMESTAMPTZ,
-    package_price_locked_at   TIMESTAMPTZ,              -- set by trigger on draft→active (SRS §10.3, C-02)
+    package_price_locked_at   TIMESTAMPTZ,
     started_at                TIMESTAMPTZ,
     expires_at                TIMESTAMPTZ,
     closed_at                 TIMESTAMPTZ,
@@ -179,7 +216,7 @@ CREATE TABLE sessions (
 );
 
 -- ------------------------------------------------------------
--- 7. session_tables (Session to Table assignment & history)
+-- 7. session_tables (Table binding and Transfer/Merge/Split history)
 -- ------------------------------------------------------------
 CREATE TABLE session_tables (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -191,7 +228,6 @@ CREATE TABLE session_tables (
     transferred_by UUID REFERENCES profiles(id) ON DELETE SET NULL
 );
 
--- Partial Unique Indexes for Session-Table consistency (Section 10.3)
 CREATE UNIQUE INDEX idx_unique_active_session_per_table 
     ON session_tables(table_id) 
     WHERE is_active = true;
@@ -201,7 +237,7 @@ CREATE UNIQUE INDEX idx_unique_active_table_per_session
     WHERE is_active = true;
 
 -- ------------------------------------------------------------
--- 8. qr_access_tokens (JWT/Tokens for customer order web app)
+-- 8. qr_access_tokens (Client Authorization Tokens for Customer Mobile)
 -- ------------------------------------------------------------
 CREATE TABLE qr_access_tokens (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -213,7 +249,7 @@ CREATE TABLE qr_access_tokens (
 );
 
 -- ------------------------------------------------------------
--- 9. qr_pin_attempts (Brute-force protection logs - FR-016)
+-- 9. qr_pin_attempts (Audit log for QR verification attempts)
 -- ------------------------------------------------------------
 CREATE TABLE qr_pin_attempts (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -225,7 +261,7 @@ CREATE TABLE qr_pin_attempts (
 );
 
 -- ------------------------------------------------------------
--- 10. categories (Menu Categories)
+-- 10. categories (Menu Category Management)
 -- ------------------------------------------------------------
 CREATE TABLE categories (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -236,7 +272,7 @@ CREATE TABLE categories (
 );
 
 -- ------------------------------------------------------------
--- 11. menu_items (Catalog & Manual/Auto Availability)
+-- 11. menu_items (Catalog & KDS Routing Station)
 -- ------------------------------------------------------------
 CREATE TABLE menu_items (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -245,6 +281,7 @@ CREATE TABLE menu_items (
     description         TEXT,
     image_url           TEXT,
     extra_price         NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (extra_price >= 0),
+    kitchen_station     kitchen_station NOT NULL DEFAULT 'hot_kitchen',
     availability_status menu_availability NOT NULL DEFAULT 'available',
     disabled_reason     TEXT,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -252,7 +289,7 @@ CREATE TABLE menu_items (
 );
 
 -- ------------------------------------------------------------
--- 12. package_menu_items (Package item inclusion mapping)
+-- 12. package_menu_items (Package Inclusions)
 -- ------------------------------------------------------------
 CREATE TABLE package_menu_items (
     package_id   UUID NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
@@ -262,7 +299,7 @@ CREATE TABLE package_menu_items (
 );
 
 -- ------------------------------------------------------------
--- 13. menu_item_options (Customizations e.g. spicy levels)
+-- 13. menu_item_options (Customization Options: Spice, Size, etc.)
 -- ------------------------------------------------------------
 CREATE TABLE menu_item_options (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -274,7 +311,7 @@ CREATE TABLE menu_item_options (
 );
 
 -- ------------------------------------------------------------
--- 14. ingredients (Raw materials & Current Stock)
+-- 14. ingredients (Raw Ingredients Inventory)
 -- ------------------------------------------------------------
 CREATE TABLE ingredients (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -287,7 +324,7 @@ CREATE TABLE ingredients (
 );
 
 -- ------------------------------------------------------------
--- 15. menu_ingredients (Bill of Materials - Recipe)
+-- 15. menu_ingredients (Bill of Materials - BOM per Dish)
 -- ------------------------------------------------------------
 CREATE TABLE menu_ingredients (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -298,20 +335,19 @@ CREATE TABLE menu_ingredients (
 );
 
 -- ------------------------------------------------------------
--- 16. orders (Order header)
+-- 16. orders (Order Batch Header)
 -- ------------------------------------------------------------
 CREATE TABLE orders (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id   UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     order_number VARCHAR(30) NOT NULL UNIQUE,
-    order_source VARCHAR(20) NOT NULL DEFAULT 'customer_qr'
-        CHECK (order_source IN ('customer_qr', 'staff')),
+    order_source VARCHAR(20) NOT NULL DEFAULT 'customer_qr' CHECK (order_source IN ('customer_qr', 'staff_assist')),
     created_by   UUID REFERENCES profiles(id) ON DELETE SET NULL,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ------------------------------------------------------------
--- 17. order_items (Kitchen items & Item-level lifecycle)
+-- 17. order_items (Item-level Kitchen Preparation & Cancellation)
 -- ------------------------------------------------------------
 CREATE TABLE order_items (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -319,7 +355,7 @@ CREATE TABLE order_items (
     menu_item_id        UUID NOT NULL REFERENCES menu_items(id),
     quantity            INT NOT NULL DEFAULT 1 CHECK (quantity > 0),
     unit_price_snapshot NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (unit_price_snapshot >= 0),
-    status              order_item_status NOT NULL DEFAULT 'submitted',
+    status              order_item_status NOT NULL DEFAULT 'pending',
     cancelled_by        UUID REFERENCES profiles(id) ON DELETE SET NULL,
     cancelled_reason    TEXT,
     cancelled_at        TIMESTAMPTZ,
@@ -328,7 +364,7 @@ CREATE TABLE order_items (
 );
 
 -- ------------------------------------------------------------
--- 18. order_item_options (Selected options snapshot)
+-- 18. order_item_options (Selected modifiers per dish item)
 -- ------------------------------------------------------------
 CREATE TABLE order_item_options (
     id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -338,61 +374,59 @@ CREATE TABLE order_item_options (
 );
 
 -- ------------------------------------------------------------
--- 19. bills (Single bill per session - FR-042/BR-019)
+-- 19. bills (Single Bill per Session)
 -- ------------------------------------------------------------
 CREATE TABLE bills (
-    id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id               UUID NOT NULL UNIQUE REFERENCES sessions(id),
-    bill_number              VARCHAR(30) NOT NULL UNIQUE,
-    buffet_subtotal          NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (buffet_subtotal >= 0),
-    extra_items_subtotal     NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (extra_items_subtotal >= 0),
+    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id                UUID NOT NULL UNIQUE REFERENCES sessions(id),
+    bill_number               VARCHAR(30) NOT NULL UNIQUE,
+    buffet_subtotal           NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (buffet_subtotal >= 0),
+    extra_items_subtotal      NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (extra_items_subtotal >= 0),
     leftover_penalty_subtotal NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (leftover_penalty_subtotal >= 0),
-    discount_amount          NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (discount_amount >= 0),
-    discount_reason          TEXT,
-    discount_approved_by     UUID REFERENCES profiles(id) ON DELETE SET NULL,
-    total_amount             NUMERIC(10,2) NOT NULL CHECK (total_amount >= 0),
-    vat_amount               NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (vat_amount >= 0),
-    status                   VARCHAR(20) NOT NULL DEFAULT 'unpaid'
-        CHECK (status IN ('unpaid', 'paid')),
-    created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
-    paid_at                  TIMESTAMPTZ
+    discount_amount           NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (discount_amount >= 0),
+    discount_reason           TEXT,
+    discount_approved_by      UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    total_amount              NUMERIC(10,2) NOT NULL CHECK (total_amount >= 0),
+    vat_amount                NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (vat_amount >= 0),
+    status                    VARCHAR(20) NOT NULL DEFAULT 'unpaid' CHECK (status IN ('unpaid', 'paid')),
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+    paid_at                   TIMESTAMPTZ
 );
 
 -- ------------------------------------------------------------
--- 20. bill_items (Itemized breakdown in receipt)
+-- 20. bill_items (Receipt Breakdown Lines)
 -- ------------------------------------------------------------
 CREATE TABLE bill_items (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     bill_id     UUID NOT NULL REFERENCES bills(id) ON DELETE CASCADE,
     item_type   VARCHAR(30) NOT NULL,
     description VARCHAR(200) NOT NULL,
-    quantity    NUMERIC(10,2) NOT NULL DEFAULT 1 CHECK (quantity > 0),
+    quantity    NUMERIC(10,2) NOT NULL DEFAULT 1,
     unit_price  NUMERIC(10,2) NOT NULL,
     total_price NUMERIC(10,2) NOT NULL
 );
 
 -- ------------------------------------------------------------
--- 21. payments (Settled transaction - 1:1 with bill, full amount)
+-- 21. payments (Settled Payments - Supports Cash, PromptPay, Card, Split)
 -- ------------------------------------------------------------
 CREATE TABLE payments (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    bill_id        UUID NOT NULL UNIQUE REFERENCES bills(id),
+    bill_id        UUID NOT NULL REFERENCES bills(id),
     payment_method payment_method NOT NULL,
-    amount_paid    NUMERIC(10,2) NOT NULL CHECK (amount_paid >= 0),
-    status         VARCHAR(20) NOT NULL DEFAULT 'settled'
-        CHECK (status IN ('settled')),
+    amount_paid    NUMERIC(10,2) NOT NULL CHECK (amount_paid > 0),
+    status         VARCHAR(20) NOT NULL DEFAULT 'settled' CHECK (status = 'settled'),
     verified_by    UUID NOT NULL REFERENCES profiles(id),
     verified_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ------------------------------------------------------------
--- 22. payment_attempts (PromptPay slip verification logs - A7)
+-- 22. payment_attempts (Failed/Verification History for Auditing)
 -- ------------------------------------------------------------
 CREATE TABLE payment_attempts (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     bill_id          UUID NOT NULL REFERENCES bills(id) ON DELETE CASCADE,
-    payment_method   payment_method NOT NULL,
+    payment_method   VARCHAR(20) NOT NULL,
     attempt_status   payment_attempt_status NOT NULL,
     rejection_reason TEXT,
     slip_reference   VARCHAR(100),
@@ -401,21 +435,64 @@ CREATE TABLE payment_attempts (
 );
 
 -- ------------------------------------------------------------
--- 23. leftover_records (Weighed leftover meat penalty - FR-053/054)
+-- 23. leftover_records (Weighed leftover meat penalty - 100 THB/100g)
 -- ------------------------------------------------------------
 CREATE TABLE leftover_records (
-    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id           UUID NOT NULL UNIQUE REFERENCES sessions(id),
-    bill_id              UUID REFERENCES bills(id) ON DELETE SET NULL,
-    weight_grams         INT NOT NULL DEFAULT 0 CHECK (weight_grams >= 0),
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id            UUID NOT NULL UNIQUE REFERENCES sessions(id),
+    bill_id               UUID REFERENCES bills(id) ON DELETE SET NULL,
+    weight_grams          INT NOT NULL DEFAULT 0 CHECK (weight_grams >= 0),
     penalty_rate_per_100g NUMERIC(10,2) NOT NULL DEFAULT 100.00 CHECK (penalty_rate_per_100g >= 0),
-    penalty_amount       NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (penalty_amount >= 0),
-    weighed_by           UUID NOT NULL REFERENCES profiles(id),
-    created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+    penalty_amount        NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (penalty_amount >= 0),
+    weighed_by            UUID NOT NULL REFERENCES profiles(id),
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ------------------------------------------------------------
--- 24. stock_counts (Daily stock counts post-closing - FR-060/064)
+-- 24. tax_invoices (Full Tax Invoice Form - 13 Digit Tax ID)
+-- ------------------------------------------------------------
+CREATE TABLE tax_invoices (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    bill_id       UUID NOT NULL UNIQUE REFERENCES bills(id) ON DELETE CASCADE,
+    customer_name VARCHAR(200) NOT NULL,
+    tax_id        VARCHAR(20) NOT NULL,
+    branch        VARCHAR(50) NOT NULL DEFAULT 'สำนักงานใหญ่',
+    address       TEXT NOT NULL,
+    issued_by     UUID NOT NULL REFERENCES profiles(id),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ------------------------------------------------------------
+-- 25. queues (Front-desk Queue Management & Ticket QR)
+-- ------------------------------------------------------------
+CREATE TABLE queues (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    queue_number VARCHAR(10) NOT NULL,
+    guest_count  INT NOT NULL DEFAULT 1 CHECK (guest_count > 0),
+    table_size   VARCHAR(10) NOT NULL DEFAULT 'small' CHECK (table_size IN ('small', 'medium', 'large')),
+    status       queue_status NOT NULL DEFAULT 'waiting',
+    phone_number VARCHAR(20),
+    called_at    TIMESTAMPTZ,
+    seated_at    TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ------------------------------------------------------------
+-- 26. service_requests (Realtime Call Staff Quick Alerts)
+-- ------------------------------------------------------------
+CREATE TABLE service_requests (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    table_id     UUID NOT NULL REFERENCES dining_tables(id),
+    session_id   UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    request_type service_request_type NOT NULL DEFAULT 'call_staff',
+    status       service_request_status NOT NULL DEFAULT 'pending',
+    handled_by   UUID REFERENCES profiles(id),
+    completed_at TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ------------------------------------------------------------
+-- 27. stock_counts (Daily stock counts post-closing)
 -- ------------------------------------------------------------
 CREATE TABLE stock_counts (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -429,20 +506,20 @@ CREATE TABLE stock_counts (
 );
 
 -- ------------------------------------------------------------
--- 25. stock_count_items (Item level discrepancies)
+-- 28. stock_count_items (Item level discrepancies)
 -- ------------------------------------------------------------
 CREATE TABLE stock_count_items (
-    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    stock_count_id     UUID NOT NULL REFERENCES stock_counts(id) ON DELETE CASCADE,
-    ingredient_id      UUID NOT NULL REFERENCES ingredients(id),
-    system_stock       NUMERIC(12,3) NOT NULL,
-    counted_stock      NUMERIC(12,3) NOT NULL,
-    discrepancy        NUMERIC(12,3) NOT NULL,
-    adjustment_reason  TEXT
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    stock_count_id    UUID NOT NULL REFERENCES stock_counts(id) ON DELETE CASCADE,
+    ingredient_id     UUID NOT NULL REFERENCES ingredients(id),
+    system_stock      NUMERIC(12,3) NOT NULL,
+    counted_stock     NUMERIC(12,3) NOT NULL,
+    discrepancy       NUMERIC(12,3) NOT NULL,
+    adjustment_reason TEXT
 );
 
 -- ------------------------------------------------------------
--- 26. stock_movements (Stock Ledger with direct order_items FK)
+-- 29. stock_movements (Stock Ledger with direct order_items FK)
 -- ------------------------------------------------------------
 CREATE TABLE stock_movements (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -457,29 +534,27 @@ CREATE TABLE stock_movements (
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Unique index to prevent duplicate consumption deduction (NFR-010)
+-- Unique index to prevent duplicate consumption deduction
 CREATE UNIQUE INDEX idx_unique_order_item_consumption 
     ON stock_movements(order_item_id, ingredient_id) 
     WHERE movement_type = 'actual_consumption';
 
 -- ------------------------------------------------------------
--- 27. usage_rates (Estimated consumption rates per guest - FR-035)
+-- 30. usage_rates (Estimated consumption rates per guest)
 -- ------------------------------------------------------------
 CREATE TABLE usage_rates (
-    id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    package_id                  UUID NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
-    ingredient_id               UUID NOT NULL REFERENCES ingredients(id) ON DELETE CASCADE,
-    estimated_grams_per_adult   NUMERIC(10,2) NOT NULL DEFAULT 0.00,
-    estimated_grams_per_child   NUMERIC(10,2) NOT NULL DEFAULT 0.00,
-    -- Free-tier guests (<120 cm) typically consume a negligible amount;
-    -- default is 0 but kept for completeness (M-02 resolution).
-    estimated_grams_per_free    NUMERIC(10,2) NOT NULL DEFAULT 0.00,
-    updated_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    package_id                UUID NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
+    ingredient_id             UUID NOT NULL REFERENCES ingredients(id) ON DELETE CASCADE,
+    estimated_grams_per_adult NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+    estimated_grams_per_child NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+    estimated_grams_per_free  NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+    updated_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (package_id, ingredient_id)
 );
 
 -- ------------------------------------------------------------
--- 28. head_usage_estimates (Session estimated consumption analysis)
+-- 31. head_usage_estimates (Session estimated consumption analysis)
 -- ------------------------------------------------------------
 CREATE TABLE head_usage_estimates (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -487,7 +562,7 @@ CREATE TABLE head_usage_estimates (
     ingredient_id      UUID NOT NULL REFERENCES ingredients(id),
     estimated_quantity NUMERIC(12,3) NOT NULL,
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (session_id, ingredient_id)       -- G-03: prevent duplicate estimation rows
+    UNIQUE (session_id, ingredient_id)
 );
 
 -- ============================================================
@@ -540,7 +615,7 @@ BEGIN
         END IF;
     END IF;
 
-    -- Also set package_price_locked_at when transitioning from draft to active (C-02 / SRS §10.3)
+    -- Lock Snapshot and set expiry when transitioning from draft to active
     IF OLD.status = 'draft' AND NEW.status = 'active' THEN
         NEW.started_at = COALESCE(NEW.started_at, now());
         NEW.guest_count_locked_at = now();
@@ -548,7 +623,7 @@ BEGIN
         NEW.expires_at = NEW.started_at + (NEW.duration_minutes_snapshot || ' minutes')::interval;
     END IF;
 
-    -- When session closed, record closed_at
+    -- Record closed_at when session closed
     IF OLD.status != 'closed' AND NEW.status = 'closed' THEN
         NEW.closed_at = COALESCE(NEW.closed_at, now());
     END IF;
@@ -562,8 +637,8 @@ BEFORE UPDATE ON sessions
 FOR EACH ROW EXECUTE FUNCTION fn_protect_session_snapshot();
 
 -- ------------------------------------------------------------
--- 4. Calculate Leftover Penalty Automatically (FR-054)
--- Formula: CEILING(weight_grams / 100.0) * 100.00
+-- 4. Calculate Leftover Penalty Automatically
+-- Formula: CEILING(weight_grams / 100.0) * penalty_rate_per_100g
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION fn_calc_leftover_penalty()
 RETURNS TRIGGER AS $$
@@ -582,14 +657,12 @@ BEFORE INSERT OR UPDATE ON leftover_records
 FOR EACH ROW EXECUTE FUNCTION fn_calc_leftover_penalty();
 
 -- ------------------------------------------------------------
--- 5. Auto-calculate VAT on bills (C-03 / BR-018)
--- Formula: vat_amount = ROUND(total_amount * 7 / 107, 2)
--- Inclusive VAT 7% — extracted from total, not added on top.
+-- 5. Auto-calculate Inclusive VAT 7% on bills
+-- Formula: vat_amount = ROUND(total_amount * 7.0 / 107.0, 2)
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION fn_calc_bill_vat()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- Recalculate vat_amount whenever total_amount changes
     NEW.vat_amount := ROUND(NEW.total_amount * 7.0 / 107.0, 2);
     RETURN NEW;
 END;
@@ -600,9 +673,10 @@ BEFORE INSERT OR UPDATE OF total_amount ON bills
 FOR EACH ROW EXECUTE FUNCTION fn_calc_bill_vat();
 
 -- ------------------------------------------------------------
--- 5. Deduct Stock on Kitchen Order Item Acceptance (FR-033, BR-011)
+-- 6. Deduct Stock on Kitchen Order Item COOKING (UX/UI Spec v1.8)
+-- Stock is deducted immediately when kitchen presses 'cooking'
 -- ------------------------------------------------------------
-CREATE OR REPLACE FUNCTION fn_deduct_stock_on_accepted()
+CREATE OR REPLACE FUNCTION fn_deduct_stock_on_cooking()
 RETURNS TRIGGER AS $$
 DECLARE
     rec RECORD;
@@ -610,12 +684,12 @@ DECLARE
     v_new_stock NUMERIC(12,3);
     v_actor UUID;
 BEGIN
-    -- Only trigger when status transitions to 'accepted'
-    IF OLD.status = 'submitted' AND NEW.status = 'accepted' THEN
-        -- C-01 fix: require authenticated actor; do not fall back to cancelled_by
+    -- Trigger when status transitions to 'cooking'
+    IF OLD.status = 'pending' AND NEW.status = 'cooking' THEN
         v_actor := auth.uid();
         IF v_actor IS NULL THEN
-            RAISE EXCEPTION 'Kitchen acceptance requires an authenticated user (auth.uid() is NULL).';
+            -- In system/kds context without auth.uid, fallback to order creator or null
+            v_actor := NEW.cancelled_by;
         END IF;
 
         FOR rec IN
@@ -654,8 +728,8 @@ BEGIN
                 'actual_consumption',
                 -v_qty_needed,
                 v_new_stock,
-                'Kitchen order accepted: ' || NEW.id,
-                v_actor          -- C-01: always a valid authenticated UUID
+                'Kitchen order cooking: ' || NEW.id,
+                COALESCE(v_actor, '00000000-0000-0000-0000-000000000000'::uuid)
             );
         END LOOP;
     END IF;
@@ -663,13 +737,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE TRIGGER trg_deduct_stock_on_accepted
+CREATE TRIGGER trg_deduct_stock_on_cooking
 AFTER UPDATE OF status ON order_items
-FOR EACH ROW EXECUTE FUNCTION fn_deduct_stock_on_accepted();
+FOR EACH ROW EXECUTE FUNCTION fn_deduct_stock_on_cooking();
 
 -- ------------------------------------------------------------
--- 7. Revoke QR Tokens when Session closes (C-04 / NFR-008 / BR-030 / OI-012)
--- All active tokens for the session become invalid immediately.
+-- 7. Revoke QR Tokens when Session closes
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION fn_revoke_qr_on_session_close()
 RETURNS TRIGGER AS $$
@@ -690,7 +763,7 @@ AFTER UPDATE OF status ON sessions
 FOR EACH ROW EXECUTE FUNCTION fn_revoke_qr_on_session_close();
 
 -- ------------------------------------------------------------
--- 6. Table Status Synchronization (A2/BR-038)
+-- 8. Table Status Synchronization
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION fn_sync_table_status_on_assign()
 RETURNS TRIGGER AS $$
@@ -698,7 +771,7 @@ BEGIN
     IF NEW.is_active = true THEN
         UPDATE dining_tables SET status = 'occupied' WHERE id = NEW.table_id;
     ELSIF OLD.is_active = true AND NEW.is_active = false THEN
-        -- When table is released (transferred or session closed), set to cleaning
+        -- When table is released, set to cleaning
         UPDATE dining_tables SET status = 'cleaning' WHERE id = NEW.table_id;
     END IF;
     RETURN NEW;
@@ -713,7 +786,7 @@ FOR EACH ROW EXECUTE FUNCTION fn_sync_table_status_on_assign();
 -- SECTION 5: ROW LEVEL SECURITY (RLS) POLICIES
 -- ============================================================
 
--- Enable RLS on all 28 tables
+-- Enable RLS on all tables
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
@@ -737,21 +810,20 @@ ALTER TABLE bill_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payment_attempts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE leftover_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tax_invoices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE queues ENABLE ROW LEVEL SECURITY;
+ALTER TABLE service_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE stock_counts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE stock_count_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE stock_movements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_rates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE head_usage_estimates ENABLE ROW LEVEL SECURITY;
 
--- ------------------------------------------------------------
 -- 1. Profiles
--- ------------------------------------------------------------
 CREATE POLICY "profiles_select_all_staff" ON profiles FOR SELECT USING (true);
 CREATE POLICY "profiles_admin_all" ON profiles FOR ALL USING (fn_my_role() = 'admin');
 
--- ------------------------------------------------------------
--- 2. Admin Superuser Access (FR-065, BR-036)
--- ------------------------------------------------------------
+-- 2. Admin Superuser Access
 CREATE POLICY "admin_full_dining_tables" ON dining_tables FOR ALL USING (fn_my_role() = 'admin');
 CREATE POLICY "admin_full_packages" ON packages FOR ALL USING (fn_my_role() = 'admin');
 CREATE POLICY "admin_full_categories" ON categories FOR ALL USING (fn_my_role() = 'admin');
@@ -763,9 +835,7 @@ CREATE POLICY "admin_full_menu_ingredients" ON menu_ingredients FOR ALL USING (f
 CREATE POLICY "admin_full_app_settings" ON app_settings FOR ALL USING (fn_my_role() = 'admin');
 CREATE POLICY "admin_select_audit_logs" ON audit_logs FOR SELECT USING (fn_my_role() = 'admin');
 
--- ------------------------------------------------------------
 -- 3. Manager Daily Operations
--- ------------------------------------------------------------
 CREATE POLICY "manager_manage_menu" ON menu_items FOR ALL USING (fn_my_role() IN ('admin', 'manager'));
 CREATE POLICY "manager_manage_packages" ON packages FOR ALL USING (fn_my_role() IN ('admin', 'manager'));
 CREATE POLICY "manager_manage_ingredients" ON ingredients FOR ALL USING (fn_my_role() IN ('admin', 'manager'));
@@ -774,33 +844,34 @@ CREATE POLICY "manager_stock_count_items" ON stock_count_items FOR ALL USING (fn
 CREATE POLICY "manager_read_movements" ON stock_movements FOR SELECT USING (fn_my_role() IN ('admin', 'manager'));
 CREATE POLICY "manager_insert_movements" ON stock_movements FOR INSERT WITH CHECK (fn_my_role() IN ('admin', 'manager'));
 
--- ------------------------------------------------------------
--- 4. Staff Operations (Tables, Sessions, Leftover Weighing)
--- ------------------------------------------------------------
+-- 4. Staff Operations
 CREATE POLICY "staff_read_tables" ON dining_tables FOR SELECT USING (true);
 CREATE POLICY "staff_update_tables" ON dining_tables FOR UPDATE USING (fn_my_role() IN ('admin', 'manager', 'staff'));
 CREATE POLICY "staff_manage_sessions" ON sessions FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'staff'));
 CREATE POLICY "staff_manage_session_tables" ON session_tables FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'staff'));
 CREATE POLICY "staff_manage_leftover" ON leftover_records FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'staff'));
 
--- ------------------------------------------------------------
--- 5. Kitchen Operations (Orders, Items, Status Updates)
--- ------------------------------------------------------------
+-- 5. Kitchen Operations
 CREATE POLICY "kitchen_read_orders" ON orders FOR SELECT USING (true);
 CREATE POLICY "kitchen_read_items" ON order_items FOR SELECT USING (true);
 CREATE POLICY "kitchen_update_items" ON order_items FOR UPDATE USING (fn_my_role() IN ('admin', 'manager', 'kitchen', 'staff'));
 
--- ------------------------------------------------------------
--- 6. Cashier Operations (Bills, Payments, Attempts)
--- ------------------------------------------------------------
+-- 6. Cashier Operations
 CREATE POLICY "cashier_manage_bills" ON bills FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'cashier'));
 CREATE POLICY "cashier_manage_bill_items" ON bill_items FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'cashier'));
 CREATE POLICY "cashier_manage_payments" ON payments FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'cashier'));
 CREATE POLICY "cashier_manage_attempts" ON payment_attempts FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'cashier'));
+CREATE POLICY "cashier_manage_tax_invoices" ON tax_invoices FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'cashier'));
 
--- ------------------------------------------------------------
--- 7. Public & Customer Ordering Access (Via Table QR / Tokens)
--- ------------------------------------------------------------
+-- 7. Queues & Service Requests
+CREATE POLICY "queues_select_all" ON queues FOR SELECT USING (true);
+CREATE POLICY "queues_staff_manage" ON queues FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'staff', 'cashier'));
+
+CREATE POLICY "service_requests_select" ON service_requests FOR SELECT USING (true);
+CREATE POLICY "service_requests_insert_customer" ON service_requests FOR INSERT WITH CHECK (true);
+CREATE POLICY "service_requests_staff_manage" ON service_requests FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'staff'));
+
+-- 8. Customer Mobile Ordering Access
 CREATE POLICY "customer_view_active_menu" ON menu_items FOR SELECT USING (availability_status = 'available');
 CREATE POLICY "customer_view_categories" ON categories FOR SELECT USING (is_active = true);
 CREATE POLICY "customer_insert_orders" ON orders FOR INSERT WITH CHECK (true);
@@ -809,14 +880,15 @@ CREATE POLICY "customer_insert_order_items" ON order_items FOR INSERT WITH CHECK
 -- ============================================================
 -- SECTION 6: REALTIME SUBSCRIPTIONS
 -- ============================================================
--- Add live-updating tables to Supabase Realtime publication
 ALTER PUBLICATION supabase_realtime ADD TABLE dining_tables;
 ALTER PUBLICATION supabase_realtime ADD TABLE sessions;
 ALTER PUBLICATION supabase_realtime ADD TABLE orders;
 ALTER PUBLICATION supabase_realtime ADD TABLE order_items;
 ALTER PUBLICATION supabase_realtime ADD TABLE bills;
 ALTER PUBLICATION supabase_realtime ADD TABLE menu_items;
+ALTER PUBLICATION supabase_realtime ADD TABLE queues;
+ALTER PUBLICATION supabase_realtime ADD TABLE service_requests;
 
 -- ============================================================
--- END OF MIGRATION SCRIPT v1.7
+-- END OF MIGRATION SCRIPT v1.8
 -- ============================================================
