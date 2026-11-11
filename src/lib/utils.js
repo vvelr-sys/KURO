@@ -1,4 +1,16 @@
+import { clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
 import { PENALTY_RATE_PER_100G } from './constants';
+
+/**
+ * Utility for combining Tailwind CSS classes cleanly.
+ * 
+ * @param  {...any} inputs 
+ * @returns {string}
+ */
+export function cn(...inputs) {
+  return twMerge(clsx(inputs));
+}
 
 /**
  * Calculates 7% Inclusive VAT extracted from total amount.
