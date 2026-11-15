@@ -18,10 +18,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 > **สำหรับ:** AI Agent & Developer — ใช้เอกสารนี้เป็น Single Source of Truth ก่อนเขียนโค้ดทุกครั้ง
 
 > [!CAUTION]
-> ### 🛑 กฎเหล็กสูงสุดสำหรับ AI Agent: ห้ามเดาข้อกำหนดเองเด็ดขาด ("ห้ามเดา")
+> ### 🛑 กฎเหล็กสูงสุดสำหรับ AI Agent: ห้ามเดาข้อกำหนดเองเด็ดขาด ("ห้ามเดา") & กฎคุณภาพโค้ด
 > 1. **ห้ามคาดเดา คิดเอง หรือทึกทักฟีเจอร์/ขั้นตอนการทำงานขึ้นมาเองเด็ดขาด:** หากพบประเด็นใดที่ไม่ชัดเจน หรือไม่มีระบุไว้ในเอกสารนี้ ให้ **หยุดและถามผู้ใช้ก่อนเสมอ**
 > 2. **ต้องรอจนกว่าผู้ใช้จะตัดสินใจและยืนยัน:** ห้ามเริ่มเขียนโค้ดหรือสร้างโครงสร้างนอกเหนือจากที่ผู้ใช้เห็นชอบ
 > 3. **ยึดตามข้อกำหนด UX/UI v1.8 เป็นหลัก 100%:** ห้ามแอบใส่ฟีเจอร์ในส่วน Out of Scope หรือกฎระบบเก่ากลับเข้ามา
+> 4. **ความหาง่ายของไฟล์ & แบ่งเป็นสัดส่วนเข้าใจง่าย:** แยก UI (`components/`), Logic/Realtime (`hooks/`), Server Actions (`actions.js`) ชัดเจน และใช้ Barrel Export (`index.js`) เพื่อให้เรียกใช้ง่ายจากจุดเดียว
+> 5. **คำนึงถึงความเร็วเว็บเป็นหลัก (Web Performance First):** ป้องกัน Re-render ด้วย `React.memo`, รวม Timer ซ้ำซ้อนเป็น Centralized Timer ระดับหน้า, ใส่ Debounce ช่องค้นหา, และใช้ Optimistic UI (ตอบสนองทันที 0ms) พร้อม Realtime Sync
+> 6. **โค้ดอ่านง่าย ไม่ใช้ศัพท์ยาก:** ตั้งชื่อตัวแปรและฟังก์ชันตรงไปตรงมา สื่อความหมายชัดเจน และมี Comment ภาษาไทยกำกับจุดสำคัญ
+> 7. **ถามก่อนแก้ไขเสมอ:** ก่อนจะลงมือแก้ไขหรือ Refactor โค้ดใดๆ ให้ตรงตามหลักการข้างต้น **ต้องสรุปแนวทางและถามผู้ใช้ก่อนเสมอ**
 
 > [!IMPORTANT]
 > อ่านทุกส่วนก่อนเริ่ม Task ใดๆ เพราะแต่ละส่วนมีกฎที่ต้องบังคับใช้ในโค้ดโดยตรง
@@ -111,11 +115,13 @@ KURO/
 │   │   ├── globals.css                # Tailwind CSS v4
 │   │   └── layout.js                  # Root Layout
 │   │
+│   ├── hooks/                         # Custom Hooks: useKitchenRealtime, useAudioAlert, useDebounce
+│   │
 │   ├── components/
 │   │   ├── ui/                        # Reusable UI: Buttons, Modals, Badges, Cards
 │   │   ├── customer/                  # Customer: MenuCard, OrderCart, Timer
 │   │   ├── pos/                       # POS: TableMap, QueueList, BillingForm
-│   │   └── kitchen/                   # Kitchen: OrderCard, StationFilter, StatusButton
+│   │   └── kitchen/                   # Kitchen: OrderTicketCard, ConsolidatedPrepList, StationFilter, index.js
 │   │
 │   └── lib/
 │       ├── supabase/                  # client.js, server.js, admin.js
@@ -234,8 +240,8 @@ draft → active → expired → closing → billed → closed
 
 | Route | หน้าจอ | สิ่งที่ต้องมี |
 |---|---|---|
-| `/(kitchen)/kds` | **3.1 KDS แยกสถานี** | เลือกสถานี (ของสด/เครื่องดื่ม/ปิ้งย่าง/ครัวร้อน), Card เรียงตามเวลา, สีเตือนรอนาน, ปุ่มใหญ่ `cooking` → `served` |
-| `/(kitchen)/stock-override` | **3.2 Override เมนูหมด** | รายการเมนูพร้อมสวิตช์ manual_off |
+| `/(kitchen)/kds` | **3.1 KDS แยกสถานี + To-Do List เตรียมอาหาร** | • เลือกสถานี (ของสด/เครื่องดื่ม/ปิ้งย่าง/ครัวร้อน)<br>• **2 โหมดมุมมอง:**<br>&nbsp;&nbsp;1. **Ticket View (การ์ดตามโต๊ะ):** รายการอาหารแต่ละรายการมี Checklist ติ๊กถูกรายเมนู (`pending` → `cooking` → `served`), ปุ่ม "ทำเสร็จทั้งหมดในบิลนี้", ตัวจับเวลารายบิล + สีเตือนรอนาน<br>&nbsp;&nbsp;2. **Consolidated Prep To-Do View (รายการเตรียมรวม):** รวมจำนวนเมนูที่ต้องเตรียมข้ามทุกโต๊ะ (เช่น หมูสไลซ์ รวม 8 ถาด) ให้ครัวหยิบเตรียมและติ๊กทำเสร็จทีละรายการได้สะดวกรวดเร็ว<br>• เสียงแจ้งเตือน Realtime เมื่อมีออเดอร์ใหม่เข้า<br>• ปุ่มยกเลิกรายการอาหาร (พร้อมระบุเหตุผล) |
+| `/(kitchen)/stock-override` | **3.2 Override เมนูหมด** | รายการเมนูพร้อมสวิตช์ `manual_off` / `available` แยกตามหมวดหมู่/สถานี |
 
 ### 4.4 ฝั่งหลังบ้าน — Desktop (ต้อง Auth: admin, manager)
 
@@ -257,9 +263,21 @@ draft → active → expired → closing → billed → closed
 > [!IMPORTANT]
 > กฎเหล่านี้ต้องถูก enforce ในระดับ Database (Trigger/RLS) และ Application Logic พร้อมกัน
 
-### กฎที่ 0 — ห้าม AI คาดเดาเด็ดขาด (Strict No-Guessing Rule)
+### กฎที่ 0 — ห้าม AI คาดเดาเด็ดขาด & กฎคุณภาพการเขียนโค้ด
 - ❌ **ห้ามคาดเดาความต้องการเอง:** หากเจอจุดที่สงสัย กำกวม หรือไม่มีในเอกสาร **ต้องหยุดถามผู้ใช้เสมอ**
 - ❌ **ห้ามตัดสินใจแทนผู้ใช้:** ห้ามคิดฟีเจอร์เพิ่ม ห้ามเปลี่ยนโฟลว์การทำงานเอง จนกว่าผู้ใช้จะตัดสินใจและยืนยัน
+- ❓ **ถามก่อนแก้ไขเสมอ (Ask Before Editing):** หากพบจุดที่ต้องปรับปรุงสถาปัตยกรรมหรือโค้ด ให้สรุปแนวทางและ **ถามผู้ใช้เพื่อขอยืนยันก่อนลงมือแก้ไขทุกครั้ง**
+- 📁 **ความหาง่ายของไฟล์ & การแบ่งสัดส่วน (Modularity):**
+  - แยก UI Component (`src/components/`), Business Logic / Server Actions (`actions.js`), และ State / Realtime (`src/hooks/`) ชัดเจน
+  - สร้างไฟล์ Barrel Export (`index.js`) รวม Component ในแต่ละโฟลเดอร์เสมอ เพื่อให้ Import เรียกใช้งานสั้นและหาง่าย
+- ⚡ **คำนึงถึงความเร็วเว็บเป็นหลัก (Web Performance First):**
+  - ใส่ `React.memo` ให้ Component ที่แสดงผลจำนวนมาก ป้องกัน Unnecessary Re-renders
+  - รวม Timer/Loop ซ้ำซ้อนให้เป็น **Centralized Timer** ระดับบน เพื่อประหยัด CPU ของแท็บเล็ตและอุปกรณ์หน้าร้าน
+  - ใช้ **Debounce** (150-200ms) สำหรับช่อง Input ค้นหา เพื่อไม่ให้คำนวณซ้ำซ้อนขณะพิมพ์
+  - ใช้ **Optimistic UI (0ms response)** ควบคู่กับ Supabase Realtime Sync เพื่อให้ปุ่มกดตอบสนองทันทีโดยไม่ต้องรอโหลด
+- 📖 **โค้ดอ่านง่าย ไม่ใช้ศัพท์ยาก (Readable & Plain Code):**
+  - ตั้งชื่อตัวแปร ฟังก์ชัน และ Props อย่างตรงไปตรงมา สื่อความหมายชัดเจน ไม่ใช้ตัวย่อหรือศัพท์เทคนิคที่เข้าใจยาก
+  - มี Comment ภาษาไทยอธิบายจุดสำคัญในโค้ดเสมอ
 - ✅ **Single Source of Truth:** ทุกฟังก์ชันต้องตรงตามเอกสาร UX/UI v1.8 เท่านั้น
 
 ### กฎที่ 1 — ลูกค้าสแกน QR เข้าได้ทันที (Zero-friction)
@@ -386,7 +404,7 @@ export const calcBuffetTotal = (session) =>
 | **T-03** | Queue System | `(pos)/queues`, `queue/[queueId]`, ตาราง `queues` |
 | **T-04** | Table Map + Session Lifecycle | `(pos)/tables`, Session CRUD, Snapshot Lock, QR Generation |
 | **T-05** | Customer Ordering App | `order/[tableNumber]/*`, Timer, Menu, Cart, Call Staff |
-| **T-06** | Kitchen KDS | `(kitchen)/kds`, `stock-override`, Realtime + Stock Deduct |
+| **T-06** | Kitchen KDS + Prep To-Do List | `(kitchen)/kds`, `stock-override`, Realtime + Stock Deduct, Checklist รายจาน และ Consolidated Prep To-Do List |
 | **T-07** | Billing + Payment + Invoice | `(pos)/billing/*`, Bill Calc, Split Payment, Tax Invoice |
 | **T-08** | Inventory + Stock Count | `(admin)/inventory`, BOM, Stock Movement, Adjust |
 | **T-09** | Reports + Audit Log | `(admin)/reports`, `(admin)/audit-logs` |
