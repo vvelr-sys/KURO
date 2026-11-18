@@ -32,19 +32,39 @@ export async function getMenuItemsWithAvailability() {
 /**
  * เปลี่ยนสถานะ availability_status ของเมนูใน Database จริง
  * (Toggle ระหว่าง 'available' ↔ 'manual_off')
+ * การปิดเมนู (manual_off) ต้องระบุเหตุผลและบันทึก Audit Log MANUAL_OFF_MENU (audit_matrix.md)
  *
  * @param {string} menuItemId - UUID ของเมนูอาหาร
  * @param {string} newAvailability - สถานะใหม่ ('available' หรือ 'manual_off')
+ * @param {string|null} reason - เหตุผลการปิดเมนู (บังคับเมื่อ manual_off)
  * @returns {Promise<{ success: boolean, error: string|null }>}
  */
-export async function toggleMenuAvailability(menuItemId, newAvailability) {
+export async function toggleMenuAvailability(menuItemId, newAvailability, reason = null) {
   try {
     const allowedValues = ['available', 'manual_off'];
     if (!allowedValues.includes(newAvailability)) {
       return { success: false, error: `ค่า '${newAvailability}' ไม่ถูกต้องสำหรับ Override` };
     }
 
+    const trimmedReason = reason?.trim() || null;
+    if (newAvailability === 'manual_off' && !trimmedReason) {
+      return { success: false, error: 'กรุณาระบุเหตุผลในการปิดเมนู' };
+    }
+
     const supabase = await createClient();
+
+    const { data: before, error: fetchError } = await supabase
+      .from('menu_items')
+      .select('name, availability_status')
+      .eq('id', menuItemId)
+      .single();
+
+    if (fetchError || !before) {
+      return { success: false, error: 'ไม่พบเมนูนี้' };
+    }
+    if (before.availability_status === 'out_of_stock') {
+      return { success: false, error: 'เมนูนี้หมดสต็อกในระบบ ไม่สามารถเปิด/ปิดด้วยมือได้' };
+    }
 
     const { error } = await supabase
       .from('menu_items')
@@ -58,15 +78,22 @@ export async function toggleMenuAvailability(menuItemId, newAvailability) {
 
     // บันทึก Audit Log เมื่อทำการปิดเมนูด้วยมือ (MANUAL_OFF_MENU)
     if (newAvailability === 'manual_off') {
-      await supabase.from('audit_logs').insert({
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error: auditError } = await supabase.from('audit_logs').insert({
+        actor_id: user?.id ?? null,
         action: 'MANUAL_OFF_MENU',
         target_entity: 'menu_items',
         target_id: menuItemId,
-        reason: 'ครัวหรือผู้จัดการปิดขายเมนูชั่วคราว (Manual Off)',
+        reason: trimmedReason,
+        payload_before: { availability_status: before.availability_status },
+        payload_after: { availability_status: 'manual_off', menu_item_name: before.name },
       });
+      if (auditError) {
+        console.error('[toggleMenuAvailability] Audit Log Error:', auditError.message);
+      }
     }
 
-    revalidatePath('/(kitchen)/stock-override');
+    revalidatePath('/stock-override');
     return { success: true, error: null };
   } catch (err) {
     console.error('[toggleMenuAvailability] Exception:', err.message);
