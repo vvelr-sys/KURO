@@ -1,8 +1,8 @@
 -- ============================================================
 -- KURO POS - Master Database Schema Migration Script (v1.8)
 -- Business Model: Shabu Buffet (Single Price per Head - Suki Teenoi Model)
--- Database: Supabase PostgreSQL (28+ Tables, RLS, Triggers, Realtime)
--- Date: 12 November 2026
+-- Database: Supabase PostgreSQL (30 Tables, RLS, Triggers, Realtime)
+-- Date: 18 November 2026 (Updated to v1.8 Architecture Decisions)
 -- ============================================================
 
 -- ============================================================
@@ -53,8 +53,8 @@ CREATE TYPE order_item_status AS ENUM (
 -- Menu availability status
 CREATE TYPE menu_availability AS ENUM (
     'available',
-    'manual_off',
-    'auto_off'
+    'out_of_stock',
+    'manual_off'
 );
 
 -- Kitchen station for KDS routing
@@ -109,7 +109,7 @@ CREATE TYPE payment_attempt_status AS ENUM (
 CREATE TYPE stock_movement_type AS ENUM (
     'actual_consumption',
     'stock_count_adjustment',
-    'cancellation_return',
+    'cancel_return',
     'kitchen_waste',
     'manual_restock'
 );
@@ -132,6 +132,7 @@ CREATE TABLE profiles (
     id          UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     full_name   VARCHAR(100) NOT NULL,
     role        user_role NOT NULL DEFAULT 'staff',
+    pin_hash    VARCHAR(255),
     is_active   BOOLEAN NOT NULL DEFAULT true,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -164,7 +165,7 @@ CREATE TABLE app_settings (
 );
 
 -- ------------------------------------------------------------
--- 4. dining_tables (20 Physical Tables)
+-- 4. dining_tables (30 Physical Tables)
 -- ------------------------------------------------------------
 CREATE TABLE dining_tables (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -184,7 +185,6 @@ CREATE TABLE packages (
     name             VARCHAR(100) NOT NULL,
     adult_price      NUMERIC(10,2) NOT NULL CHECK (adult_price >= 0),
     child_price      NUMERIC(10,2) NOT NULL CHECK (child_price >= 0),
-    free_price       NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (free_price >= 0),
     duration_minutes INT NOT NULL DEFAULT 90 CHECK (duration_minutes > 0),
     is_active        BOOLEAN NOT NULL DEFAULT true,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -200,10 +200,8 @@ CREATE TABLE sessions (
     status                    session_status NOT NULL DEFAULT 'draft',
     adult_guest_count         INT NOT NULL DEFAULT 0 CHECK (adult_guest_count >= 0),
     child_guest_count         INT NOT NULL DEFAULT 0 CHECK (child_guest_count >= 0),
-    free_guest_count          INT NOT NULL DEFAULT 0 CHECK (free_guest_count >= 0),
     adult_price_snapshot      NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (adult_price_snapshot >= 0),
     child_price_snapshot      NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (child_price_snapshot >= 0),
-    free_price_snapshot       NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (free_price_snapshot >= 0),
     duration_minutes_snapshot INT NOT NULL DEFAULT 90 CHECK (duration_minutes_snapshot > 0),
     guest_count_locked_at     TIMESTAMPTZ,
     package_price_locked_at   TIMESTAMPTZ,
@@ -228,12 +226,9 @@ CREATE TABLE session_tables (
     transferred_by UUID REFERENCES profiles(id) ON DELETE SET NULL
 );
 
+-- Ensure 1 table has at most 1 active session. (Merged sessions can hold multiple active tables)
 CREATE UNIQUE INDEX idx_unique_active_session_per_table 
     ON session_tables(table_id) 
-    WHERE is_active = true;
-
-CREATE UNIQUE INDEX idx_unique_active_table_per_session 
-    ON session_tables(session_id) 
     WHERE is_active = true;
 
 -- ------------------------------------------------------------
@@ -244,20 +239,8 @@ CREATE TABLE qr_access_tokens (
     session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     token_hash VARCHAR(255) NOT NULL UNIQUE,
     is_revoked BOOLEAN NOT NULL DEFAULT false,
-    expires_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- ------------------------------------------------------------
--- 9. qr_pin_attempts (Audit log for QR verification attempts)
--- ------------------------------------------------------------
-CREATE TABLE qr_pin_attempts (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id    UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    is_successful BOOLEAN NOT NULL,
-    client_ip     VARCHAR(50),
-    user_agent    TEXT,
-    attempted_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ------------------------------------------------------------
@@ -548,7 +531,6 @@ CREATE TABLE usage_rates (
     ingredient_id             UUID NOT NULL REFERENCES ingredients(id) ON DELETE CASCADE,
     estimated_grams_per_adult NUMERIC(10,2) NOT NULL DEFAULT 0.00,
     estimated_grams_per_child NUMERIC(10,2) NOT NULL DEFAULT 0.00,
-    estimated_grams_per_free  NUMERIC(10,2) NOT NULL DEFAULT 0.00,
     updated_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (package_id, ingredient_id)
 );
@@ -606,10 +588,8 @@ BEGIN
     IF OLD.status != 'draft' THEN
         IF NEW.adult_guest_count != OLD.adult_guest_count OR
            NEW.child_guest_count != OLD.child_guest_count OR
-           NEW.free_guest_count != OLD.free_guest_count OR
            NEW.adult_price_snapshot != OLD.adult_price_snapshot OR
            NEW.child_price_snapshot != OLD.child_price_snapshot OR
-           NEW.free_price_snapshot != OLD.free_price_snapshot OR
            NEW.duration_minutes_snapshot != OLD.duration_minutes_snapshot THEN
             RAISE EXCEPTION 'Session guest count and price snapshots are strictly immutable once active (FR-059, FR-061).';
         END IF;
@@ -795,7 +775,6 @@ ALTER TABLE packages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE session_tables ENABLE ROW LEVEL SECURITY;
 ALTER TABLE qr_access_tokens ENABLE ROW LEVEL SECURITY;
-ALTER TABLE qr_pin_attempts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE menu_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE package_menu_items ENABLE ROW LEVEL SECURITY;
@@ -833,23 +812,23 @@ CREATE POLICY "admin_full_menu_options" ON menu_item_options FOR ALL USING (fn_m
 CREATE POLICY "admin_full_ingredients" ON ingredients FOR ALL USING (fn_my_role() = 'admin');
 CREATE POLICY "admin_full_menu_ingredients" ON menu_ingredients FOR ALL USING (fn_my_role() = 'admin');
 CREATE POLICY "admin_full_app_settings" ON app_settings FOR ALL USING (fn_my_role() = 'admin');
-CREATE POLICY "admin_select_audit_logs" ON audit_logs FOR SELECT USING (fn_my_role() = 'admin');
+CREATE POLICY "audit_logs_select" ON audit_logs FOR SELECT USING (fn_my_role() IN ('admin', 'manager'));
 
 -- 3. Manager Daily Operations
+CREATE POLICY "packages_select_all" ON packages FOR SELECT USING (true);
 CREATE POLICY "manager_manage_menu" ON menu_items FOR ALL USING (fn_my_role() IN ('admin', 'manager'));
-CREATE POLICY "manager_manage_packages" ON packages FOR ALL USING (fn_my_role() IN ('admin', 'manager'));
 CREATE POLICY "manager_manage_ingredients" ON ingredients FOR ALL USING (fn_my_role() IN ('admin', 'manager'));
 CREATE POLICY "manager_stock_counts" ON stock_counts FOR ALL USING (fn_my_role() IN ('admin', 'manager'));
 CREATE POLICY "manager_stock_count_items" ON stock_count_items FOR ALL USING (fn_my_role() IN ('admin', 'manager'));
 CREATE POLICY "manager_read_movements" ON stock_movements FOR SELECT USING (fn_my_role() IN ('admin', 'manager'));
 CREATE POLICY "manager_insert_movements" ON stock_movements FOR INSERT WITH CHECK (fn_my_role() IN ('admin', 'manager'));
 
--- 4. Staff Operations
+-- 4. Staff & Cashier Operations
 CREATE POLICY "staff_read_tables" ON dining_tables FOR SELECT USING (true);
-CREATE POLICY "staff_update_tables" ON dining_tables FOR UPDATE USING (fn_my_role() IN ('admin', 'manager', 'staff'));
-CREATE POLICY "staff_manage_sessions" ON sessions FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'staff'));
-CREATE POLICY "staff_manage_session_tables" ON session_tables FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'staff'));
-CREATE POLICY "staff_manage_leftover" ON leftover_records FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'staff'));
+CREATE POLICY "staff_update_tables" ON dining_tables FOR UPDATE USING (fn_my_role() IN ('admin', 'manager', 'cashier', 'staff'));
+CREATE POLICY "staff_manage_sessions" ON sessions FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'cashier', 'staff'));
+CREATE POLICY "staff_manage_session_tables" ON session_tables FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'cashier', 'staff'));
+CREATE POLICY "staff_manage_leftover" ON leftover_records FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'cashier', 'staff'));
 
 -- 5. Kitchen Operations
 CREATE POLICY "kitchen_read_orders" ON orders FOR SELECT USING (true);
@@ -863,9 +842,9 @@ CREATE POLICY "cashier_manage_payments" ON payments FOR ALL USING (fn_my_role() 
 CREATE POLICY "cashier_manage_attempts" ON payment_attempts FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'cashier'));
 CREATE POLICY "cashier_manage_tax_invoices" ON tax_invoices FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'cashier'));
 
--- 7. Queues & Service Requests
+-- 7. Queues & Service Requests (Cashier/Manager/Admin manage queues; Staff cannot issue/call queues)
 CREATE POLICY "queues_select_all" ON queues FOR SELECT USING (true);
-CREATE POLICY "queues_staff_manage" ON queues FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'staff', 'cashier'));
+CREATE POLICY "queues_manage" ON queues FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'cashier'));
 
 CREATE POLICY "service_requests_select" ON service_requests FOR SELECT USING (true);
 CREATE POLICY "service_requests_insert_customer" ON service_requests FOR INSERT WITH CHECK (true);

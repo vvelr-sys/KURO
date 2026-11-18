@@ -48,10 +48,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 | ผู้ใช้ | อุปกรณ์ | หน้าที่หลัก |
 |---|---|---|
-| **Customer** | มือถือ (สแกน QR) | ดูคิว, สั่งอาหาร, ดูสถานะ, เรียกพนักงาน — **ไม่ต้องล็อกอิน** |
-| **Staff** | Tablet / มือถือ | จัดการคิว, ผังโต๊ะ, รับชำระเงิน, รับแจ้งเตือน |
+| **Customer** | มือถือ (สแกน QR) | ดูคิว, สั่งอาหารเองผ่าน QR โต๊ะ, ดูสถานะ, เรียกพนักงาน — **ไม่ต้องล็อกอิน** |
+| **Cashier** | Tablet / Desktop เคาน์เตอร์ | ออกบัตรคิว, เรียกคิว, เปิดโต๊ะ, ย้าย/รวม/แยกโต๊ะ, คิดเงิน, รับชำระ, พิมพ์ใบเสร็จ/ใบกำกับภาษี, กรอกส่วนลด |
+| **Staff** | Tablet / มือถือ | ย้าย/รวม/แยกโต๊ะ, ยืนยันทำความสะอาดโต๊ะเสร็จ, ชั่งเนื้อเหลือ, รับแจ้งเตือนเรียกพนักงาน (**ออกบัตรคิวไม่ได้**) |
 | **Kitchen** | จอใหญ่ / Tablet ติดผนัง (KDS) | รับ-เปลี่ยนสถานะออเดอร์ แยกสถานี, Override เมนูหมด |
-| **Manager / Admin** | Desktop | จัดการหลังบ้านทั้งหมด: เมนู, ราคา, สต็อก, รายงาน, Audit |
+| **Manager** | Desktop / Tablet | จัดการเมนู, สต็อกวัตถุดิบ, ตรวจนับและอนุมัติปรับยอดสต็อก, ดูรายงานยอดขาย, ช่วยงานหน้าร้านและครัว |
+| **Admin** | Desktop | จัดการหลังบ้านทั้งหมด: พนักงานและสิทธิ์, ตั้งราคาบุฟเฟต์/VAT, ตั้งค่าร้านค้า, Audit Log เต็มสิทธิ์ |
 
 ---
 
@@ -64,14 +66,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 | **Framework** | Next.js 16 (App Router, Server Actions, Route Handlers) |
 | **Language** | JavaScript ES2022+ พร้อม JSDoc (ห้ามใช้ TypeScript) |
 | **Styling** | Tailwind CSS v4, Lucide React, clsx, tailwind-merge |
-| **Database** | Supabase PostgreSQL (28+ ตาราง) |
-| **Auth** | Supabase Auth — Email/Password สำหรับ Staff เท่านั้น |
+| **Database** | Supabase PostgreSQL (30 ตาราง) |
+| **Auth** | Supabase Auth — Email/Password และ Staff PIN (bcrypt) สำหรับพนักงานเท่านั้น |
 | **Realtime** | Supabase Realtime Channels (Broadcast + Postgres Changes) |
 | **QR Code** | qrcode.react สำหรับ QR โต๊ะและบัตรคิว |
 | **Security** | bcryptjs สำหรับ Staff PIN hashing |
 
 > [!NOTE]
-> ลูกค้า **ไม่มี** Auth — เข้าสู่หน้าสั่งอาหารด้วย QR Token ของ Session โดยตรง ไม่ต้องกรอก PIN
+> ลูกค้า **ไม่มี** Auth และ **ไม่มี PIN** — เข้าสู่หน้าสั่งอาหารด้วย QR Token ของ Session โดยตรง ไม่ต้องกรอก PIN
 
 ### 2.2 โครงสร้างโฟลเดอร์ (Next.js 16 App Router)
 
@@ -86,30 +88,30 @@ KURO/
 │   │   │   └── login/                 # 4.1 หน้าล็อกอิน (Supabase Auth + Staff PIN)
 │   │   │
 │   │   ├── (pos)/                     # ═══ กลุ่ม: พนักงานหน้าร้าน (Tablet/Mobile) ═══
-│   │   │   ├── queues/                # 2.1 จัดการคิวและออกบัตรคิว
-│   │   │   ├── tables/                # 2.2 ผังโต๊ะ (เปิด/ปิด/ย้าย/รวม/แยก)
-│   │   │   ├── billing/               # 2.3 คิดเงินและชำระเงิน
-│   │   │   │   └── tax-invoice/       # 2.4 พิมพ์ใบเสร็จ / ใบกำกับภาษีเต็มรูป
-│   │   │   └── service-requests/      # 2.5 แจ้งเตือนเรียกพนักงาน (Realtime)
+│   │   │   ├── queues/                # 2.1 จัดการคิวและออกบัตรคิว (Cashier, Manager, Admin)
+│   │   │   ├── tables/                # 2.2 ผังโต๊ะ (Cashier, Staff, Manager, Admin)
+│   │   │   ├── billing/               # 2.3 คิดเงินและชำระเงิน (Cashier, Manager, Admin)
+│   │   │   │   └── tax-invoice/       # 2.4 พิมพ์ใบเสร็จ / ใบกำกับภาษีเต็มรูป (Cashier, Manager, Admin)
+│   │   │   └── service-requests/      # 2.5 แจ้งเตือนเรียกพนักงาน Realtime (Staff, Manager, Admin)
 │   │   │
 │   │   ├── (kitchen)/                 # ═══ กลุ่ม: ครัว KDS (จอใหญ่/Tablet) ═══
-│   │   │   ├── kds/                   # 3.1 KDS แยกสถานี (ของสด/เครื่องดื่ม/ปิ้งย่าง/ครัวร้อน)
-│   │   │   └── stock-override/        # 3.2 Override เปิด/ปิดเมนูด้วยตนเอง
+│   │   │   ├── kds/                   # 3.1 KDS แยกสถานี (Kitchen, Manager, Admin)
+│   │   │   └── stock-override/        # 3.2 Override เปิด/ปิดเมนูด้วยตนเอง (Kitchen, Manager, Admin)
 │   │   │
 │   │   ├── (admin)/                   # ═══ กลุ่ม: หลังบ้าน (Desktop) ═══
-│   │   │   ├── menu/                  # 4.2 จัดการเมนู + สูตรตัดสต็อก (BOM)
-│   │   │   ├── packages/              # 4.3 ตั้งค่าราคาบุฟเฟต์ + VAT + Service Charge
-│   │   │   ├── inventory/             # 4.4 จัดการสต็อกวัตถุดิบ
-│   │   │   ├── reports/               # 4.5 รายงานยอดขาย
-│   │   │   ├── staff/                 # 4.6 จัดการพนักงานและสิทธิ์
-│   │   │   ├── audit-logs/            # 4.7 ประวัติการทำงาน (Audit Log)
-│   │   │   └── settings/              # 4.8 ตั้งค่าร้านค้า
+│   │   │   ├── menu/                  # 4.2 จัดการเมนู + สูตรตัดสต็อก BOM (Manager, Admin)
+│   │   │   ├── packages/              # 4.3 ตั้งค่าราคาบุฟเฟต์ + VAT (Admin เท่านั้น)
+│   │   │   ├── inventory/             # 4.4 จัดการสต็อก (Manager; Admin เฉพาะ Emergency)
+│   │   │   ├── reports/               # 4.5 รายงานยอดขาย (Manager, Admin)
+│   │   │   ├── staff/                 # 4.6 จัดการพนักงานและสิทธิ์ (Admin เท่านั้น)
+│   │   │   ├── audit-logs/            # 4.7 ประวัติการทำงาน Audit Log (Admin เต็มสิทธิ์, Manager ตามสิทธิ์)
+│   │   │   └── settings/              # 4.8 ตั้งค่าร้านค้า (Admin เท่านั้น)
 │   │   │
 │   │   ├── queue/[queueId]/           # ═══ กลุ่ม: ลูกค้า (Mobile) ═══
-│   │   ├── order/[tableNumber]/        # 1.2 สั่งอาหาร + ตัวจับเวลา
-│   │   │   ├── status/                # 1.3 ติดตามสถานะอาหาร
-│   │   │   ├── call-staff/            # 1.4 เรียกพนักงาน
-│   │   │   └── summary/               # 1.5 สรุปรายการที่สั่งในรอบ
+│   │   ├── order/[tableNumber]/        # 1.2 สั่งอาหารเอง + ตัวจับเวลา (Customer ผ่าน QR โต๊ะ)
+│   │   │   ├── status/                # 1.3 ติดตามสถานะอาหาร (Customer)
+│   │   │   ├── call-staff/            # 1.4 เรียกพนักงาน (Customer)
+│   │   │   └── summary/               # 1.5 สรุปรายการที่สั่งในรอบ (Customer)
 │   │   │
 │   │   ├── api/                       # Route Handlers & Webhooks
 │   │   ├── globals.css                # Tailwind CSS v4
@@ -126,11 +128,11 @@ KURO/
 │   └── lib/
 │       ├── supabase/                  # client.js, server.js, admin.js
 │       ├── utils.js                   # cn(), formatCurrency(), calcVAT(), calcPenalty()
-│       └── constants/                 # index.js — Enums & State Values
+│       └── constants/                 # index.js — Enums, State Values & Route Permissions
 │
 └── supabase/
     └── migrations/
-        └── 001_initial_schema.sql     # Migration สมบูรณ์ (28 ตาราง + RLS + Triggers)
+        └── 001_initial_schema.sql     # Migration สมบูรณ์ (30 ตาราง + RLS + Triggers)
 ```
 
 ---
@@ -228,33 +230,33 @@ draft → active → expired → closing → billed → closed
 
 ### 4.2 ฝั่งพนักงาน — Tablet/Mobile POS (ต้อง Auth: staff, cashier)
 
-| Route | หน้าจอ | สิ่งที่ต้องมี |
-|---|---|---|
-| `/(pos)/queues` | **2.1 จัดการคิว** | ออกบัตรคิว (จำนวนคน → ขนาดโต๊ะอัตโนมัติ → พิมพ์ QR), รายการคิว, ปุ่มเรียก/ข้าม/ยกเลิก/พิมพ์ซ้ำ |
-| `/(pos)/tables` | **2.2 ผังโต๊ะ** | ผัง + สี + Timer, ฟังก์ชัน: เปิด/ปิด/ย้าย/รวม/แยกโต๊ะ |
-| `/(pos)/billing` | **2.3 ชำระเงิน** | สรุปยอด, เพิ่มรายการพิเศษ, ส่วนลด, เงินสด/PromptPay/บัตร/Split |
-| `/(pos)/billing/tax-invoice` | **2.4 ใบกำกับภาษี** | พรีวิวใบเสร็จ, ฟอร์มข้อมูลนิติบุคคล/บุคคล, เลขผู้เสียภาษี 13 หลัก, พิมพ์/อีเมล |
-| `/(pos)/service-requests` | **2.5 แจ้งเตือน** | รายการ Realtime (โต๊ะ+ประเภท+เวลารอ), เสียง/สี, ปุ่มรับเรื่อง/เสร็จ |
+| Route | หน้าจอ | บทบาทที่เข้าถึงได้ | สิ่งที่ต้องมี |
+|---|---|---|---|
+| `/(pos)/queues` | **2.1 จัดการคิว** | `cashier`, `manager`, `admin` *(staff ทำไม่ได้)* | ออกบัตรคิว (จำนวนคน → ขนาดโต๊ะอัตโนมัติ → พิมพ์ QR), รายการคิว, ปุ่มเรียก/ข้าม/ยกเลิก/พิมพ์ซ้ำ |
+| `/(pos)/tables` | **2.2 ผังโต๊ะ** | `cashier`, `staff`, `manager`, `admin` | ผัง 30 โต๊ะ + สี + Timer, ฟังก์ชัน: เปิดโต๊ะ (Cashier), ย้าย/รวม/แยกโต๊ะ (Cashier/Staff), ยืนยันทำความสะอาดเสร็จ (Staff) |
+| `/(pos)/billing` | **2.3 ชำระเงิน** | `cashier`, `manager`, `admin` *(staff ทำไม่ได้)* | สรุปยอด, เพิ่มรายการพิเศษ/ค่าปรับเนื้อเหลือ, กรอกส่วนลด (ระบุเหตุผล), เงินสด/PromptPay/บัตร/Split Payment |
+| `/(pos)/billing/tax-invoice` | **2.4 ใบกำกับภาษี** | `cashier`, `manager`, `admin` | พรีวิวใบเสร็จ, ฟอร์มข้อมูลนิติบุคคล/บุคคล, เลขผู้เสียภาษี 13 หลัก, พิมพ์/อีเมล |
+| `/(pos)/service-requests` | **2.5 แจ้งเตือน** | `staff`, `manager`, `admin` | รายการ Realtime (โต๊ะ+ประเภท+เวลารอ), เสียง/สี, ปุ่มรับเรื่อง/เสร็จ |
 
 ### 4.3 ฝั่งครัว — KDS (ต้อง Auth: kitchen)
 
-| Route | หน้าจอ | สิ่งที่ต้องมี |
-|---|---|---|
-| `/(kitchen)/kds` | **3.1 KDS แยกสถานี + To-Do List เตรียมอาหาร** | • เลือกสถานี (ของสด/เครื่องดื่ม/ปิ้งย่าง/ครัวร้อน)<br>• **2 โหมดมุมมอง:**<br>&nbsp;&nbsp;1. **Ticket View (การ์ดตามโต๊ะ):** รายการอาหารแต่ละรายการมี Checklist ติ๊กถูกรายเมนู (`pending` → `cooking` → `served`), ปุ่ม "ทำเสร็จทั้งหมดในบิลนี้", ตัวจับเวลารายบิล + สีเตือนรอนาน<br>&nbsp;&nbsp;2. **Consolidated Prep To-Do View (รายการเตรียมรวม):** รวมจำนวนเมนูที่ต้องเตรียมข้ามทุกโต๊ะ (เช่น หมูสไลซ์ รวม 8 ถาด) ให้ครัวหยิบเตรียมและติ๊กทำเสร็จทีละรายการได้สะดวกรวดเร็ว<br>• เสียงแจ้งเตือน Realtime เมื่อมีออเดอร์ใหม่เข้า<br>• ปุ่มยกเลิกรายการอาหาร (พร้อมระบุเหตุผล) |
-| `/(kitchen)/stock-override` | **3.2 Override เมนูหมด** | รายการเมนูพร้อมสวิตช์ `manual_off` / `available` แยกตามหมวดหมู่/สถานี |
+| Route | หน้าจอ | บทบาทที่เข้าถึงได้ | สิ่งที่ต้องมี |
+|---|---|---|---|
+| `/(kitchen)/kds` | **3.1 KDS แยกสถานี + To-Do List เตรียมอาหาร** | `kitchen`, `manager`, `admin` | • เลือกสถานี (ของสด/เครื่องดื่ม/ปิ้งย่าง/ครัวร้อน)<br>• **2 โหมดมุมมอง:**<br>&nbsp;&nbsp;1. **Ticket View (การ์ดตามโต๊ะ):** รายการอาหารแต่ละรายการมี Checklist ติ๊กถูกรายเมนู (`pending` → `cooking` → `served`), ปุ่ม "ทำเสร็จทั้งหมดในบิลนี้", ตัวจับเวลารายบิล + สีเตือนรอนาน<br>&nbsp;&nbsp;2. **Consolidated Prep To-Do View (รายการเตรียมรวม):** รวมจำนวนเมนูที่ต้องเตรียมข้ามทุกโต๊ะ (เช่น หมูสไลซ์ รวม 8 ถาด) ให้ครัวหยิบเตรียมและติ๊กทำเสร็จทีละรายการได้สะดวกรวดเร็ว<br>• เสียงแจ้งเตือน Realtime เมื่อมีออเดอร์ใหม่เข้า<br>• ปุ่มยกเลิกรายการอาหาร (พร้อมระบุเหตุผล) |
+| `/(kitchen)/stock-override` | **3.2 Override เมนูหมด** | `kitchen`, `manager`, `admin` | รายการเมนูพร้อมสวิตช์ `manual_off` / `available` แยกตามหมวดหมู่/สถานี |
 
 ### 4.4 ฝั่งหลังบ้าน — Desktop (ต้อง Auth: admin, manager)
 
-| Route | หน้าจอ | สิ่งที่ต้องมี |
-|---|---|---|
-| `/(auth)/login` | **4.1 Login** | Email/Password หรือ Staff PIN, Redirect ตาม Role |
-| `/(admin)/menu` | **4.2 จัดการเมนู** | ชื่อ, รูป, หมวดหมู่, `kitchen_station`, สูตร BOM, เปิด/ปิดขาย, จำกัดจำนวนสั่งต่อรอบ |
-| `/(admin)/packages` | **4.3 ราคา/แพ็กเกจ** | ราคาผู้ใหญ่/เด็ก, duration, VAT %, Service Charge % |
-| `/(admin)/inventory` | **4.4 สต็อก** | ของคงเหลือ, Reorder point, รับเข้า, ของเสีย, ตรวจนับรายวัน |
-| `/(admin)/reports` | **4.5 รายงาน** | ยอดขายวัน/เดือน, เมนูขายดี, จำนวนลูกค้า, Export Excel/PDF |
-| `/(admin)/staff` | **4.6 พนักงาน** | เพิ่ม/แก้ไข/ปิดใช้งาน, กำหนด Role |
-| `/(admin)/audit-logs` | **4.7 Audit** | ค้นหา/กรองประวัติ (ใคร ทำอะไร เมื่อไหร่ เหตุผล) |
-| `/(admin)/settings` | **4.8 ตั้งค่า** | ข้อมูลร้าน, ผังโต๊ะ, เครื่องพิมพ์, รูปแบบใบเสร็จ |
+| Route | หน้าจอ | บทบาทที่เข้าถึงได้ | สิ่งที่ต้องมี |
+|---|---|---|---|
+| `/(auth)/login` | **4.1 Login** | ทุก Role | Email/Password หรือ Staff PIN (bcrypt), Redirect ตาม Role |
+| `/(admin)/menu` | **4.2 จัดการเมนู** | `manager`, `admin` | ชื่อ, รูป, หมวดหมู่, `kitchen_station`, สูตร BOM, เปิด/ปิดขาย, จำกัดจำนวนสั่งต่อรอบ |
+| `/(admin)/packages` | **4.3 ราคา/แพ็กเกจ** | `admin` เท่านั้น | ราคาผู้ใหญ่/เด็ก (ต่ำกว่า 120 ซม.), duration, VAT % (ไม่มี Service Charge) |
+| `/(admin)/inventory` | **4.4 สต็อก** | `manager` (Admin เฉพาะ Emergency) | ของคงเหลือ, Reorder point, รับเข้า, ของเสีย, ตรวจนับสต็อกประจำวัน/อนุมัติปรับยอด |
+| `/(admin)/reports` | **4.5 รายงาน** | `manager`, `admin` | ยอดขายวัน/เดือน, เมนูขายดี, จำนวนลูกค้า, Export Excel/PDF |
+| `/(admin)/staff` | **4.6 พนักงาน** | `admin` เท่านั้น | เพิ่ม/แก้ไข/ปิดใช้งาน, กำหนด Role (Staff PIN bcrypt) |
+| `/(admin)/audit-logs` | **4.7 Audit** | `admin` (เต็มสิทธิ์), `manager` (ตามสิทธิ์) | ค้นหา/กรองประวัติ (ใคร ทำอะไร เมื่อไหร่ เหตุผล) |
+| `/(admin)/settings` | **4.8 ตั้งค่า** | `admin` เท่านั้น | ข้อมูลร้าน, ผังโต๊ะ (30 โต๊ะ), เครื่องพิมพ์, รูปแบบใบเสร็จ |
 
 ---
 
@@ -383,7 +385,9 @@ export const calcBuffetTotal = (session) =>
 
 | รายการ | เหตุผล |
 |---|---|
+| การรับออเดอร์แทนลูกค้า (`staff_assist`) | ลูกค้าสั่งเองผ่าน QR โต๊ะ 100% — การสั่งแทนย้ายไป Phase 2 |
 | หน้าเลือกแพ็กเกจ | เป็นบุฟเฟต์ราคาเดียว ไม่มีตัวเลือก |
+| ค่าบริการ (Service Charge) | ตัดออกจากระบบถาวร (ไม่มี Service Charge) |
 | ระบบโปรโมชั่น/คูปอง | Phase 2 |
 | ระบบสมาชิก/สะสมแต้ม | Phase 2 |
 | ระบบรีวิว/ให้คะแนน | Phase 2 |
@@ -417,7 +421,7 @@ export const calcBuffetTotal = (session) =>
 ```
 ทำ T-04: Table Map + Session Lifecycle
 - อ่าน AGENTS.md ส่วนที่ 2-5 ก่อน
-- สร้างหน้า /(pos)/tables ที่แสดงผังโต๊ะ 20 โต๊ะ
+- สร้างหน้า /(pos)/tables ที่แสดงผังโต๊ะ 30 โต๊ะ
 - รองรับ Merge/Split ตาม Business Rule กฎที่ 2 และ 5
 - ใช้ Supabase Realtime subscribe `table-status`
 ```
@@ -428,26 +432,28 @@ export const calcBuffetTotal = (session) =>
 
 | เอกสาร | เนื้อหา | ลิงก์ |
 |---|---|---|
-| **SRS v1.8** | Functional Requirements ครบ 75 ข้อ + Business Rules | [`docs/01-requirements/SRS.md`](docs/01-requirements/SRS.md) |
-| **Data Dictionary v1.8** | โครงสร้างตารางทั้ง 28 ตาราง + Field Descriptions | [`docs/02-database/data_dictionary.md`](docs/02-database/data_dictionary.md) |
-| **Audit Matrix v1.8** | ประวัติการตัดสินใจสถาปัตยกรรม + UX/UI Alignment | [`docs/03-audit/audit_matrix.md`](docs/03-audit/audit_matrix.md) |
-| **Database Schema** | Migration SQL สมบูรณ์ (28 Tables + RLS + Triggers) | [`supabase/migrations/001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql) |
+| **SRS v1.8** | Functional Requirements รวม 57 ข้อ (FR-001 ถึง FR-075 โดยมี 18 ข้อข้าม) + Business Rules | [`docs/01-requirements/SRS.md`](docs/01-requirements/SRS.md) |
+| **Data Dictionary v1.8** | โครงสร้างตารางทั้ง 30 ตาราง + Field Descriptions | [`docs/02-database/data_dictionary.md`](docs/02-database/data_dictionary.md) |
+| **Audit Matrix v1.8** | ประวัติการตัดสินใจสถาปัตยกรรม + RLS Matrix ฉบับปรับปรุงใหม่ | [`docs/03-audit/audit_matrix.md`](docs/03-audit/audit_matrix.md) |
+| **Database Schema** | Migration SQL สมบูรณ์ (30 Tables + RLS + Triggers) | [`supabase/migrations/001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql) |
 | **Constants** | Enum ค่าสถานะทั้งหมดในโค้ด | [`src/lib/constants/index.js`](src/lib/constants/index.js) |
 
 ---
 
-## ส่วนที่ 10 — ข้อตัดสินใจเพิ่มเติมตาม PDF UX/UI (12 พฤศจิกายน 2026)
+## ส่วนที่ 10 — ข้อตัดสินใจทางสถาปัตยกรรม (อัปเดต 18 พฤศจิกายน 2026)
 
-> ตัดสินใจแล้ว แต่ schema/SQL/trigger อาจยังไม่ปรับตาม — ตรวจและเพิ่ม migration ก่อนเขียนโค้ดที่เกี่ยวข้อง
+> ยึดตามข้อสรุปการทบทวนเอกสารและมติระบบ v1.8 (Single Source of Truth)
 
-| เรื่อง | ข้อตัดสินใจ | งานที่ตามมา / ข้อสงสัย |
+| เรื่อง | ข้อตัดสินใจที่ยืนยันแล้ว | รายละเอียดทางเทคนิค / การบังคับใช้ |
 |---|---|---|
-| เมนูหมด | หน้าลูกค้าแสดงสถานะ "หมด" กดสั่งไม่ได้ (ไม่ซ่อน) | — |
-| ยกเลิกรายการ `cooking` | คืนสต็อกตามสูตร BOM | เพิ่ม movement_type สำหรับการคืน (เสนอชื่อ `cancel_return`) และ logic/trigger คืนสต็อก |
-| ส่วนลด | พนักงานคิดเงิน (Cashier/Manager/Admin) กรอกเองได้ ไม่ต้องรออนุมัติ ยังต้องระบุเหตุผลและบันทึก audit | ทบทวนชื่อ action `APPROVE_DISCOUNT` และคอลัมน์ `bills.discount_approved_by` (ตอนนี้ความหมายคือผู้ให้ส่วนลด) |
-| กลุ่มลูกค้า | เหลือผู้ใหญ่/เด็ก ตัดกลุ่ม "ฟรี" | migration ลบ `packages.free_price`, `sessions.free_guest_count`, `sessions.free_price_snapshot`, `usage_rates.estimated_grams_per_free`; ยังไม่ได้กำหนดว่าเด็กต่ำกว่า 120 ซม. คิดอย่างไร → ถามก่อน |
-| QR token | เพิกถอนตอน `closed` เท่านั้น ช่วง `expired` เปิดหน้าได้แต่สั่งไม่ได้ | `qr_access_tokens.expires_at` ปัจจุบันอ้าง `sessions.expires_at` ต้องกำหนดใหม่ไม่ให้หมดอายุก่อน `closed` |
-| ค่าปรับนั่งเกินเวลา | ไม่มีในเฟสแรก | — |
-| แจ้งเตือนก่อนหมดเวลา | แจ้งเฉพาะตอนครบเวลา (คงตามเดิม ไม่ทำตาม PDF 1.2) | — |
-| สิทธิ์รายหน้าจอ | ต้องกำหนดสิทธิ์เข้าถึงรายหน้าจอได้ (PDF 4.6) นอกเหนือจาก role | ยังไม่กำหนดโครงสร้างตาราง (รายคนหรือรายบทบาท) และ RLS → ถามก่อนทำ |
-| ชื่อบทบาทใน PDF | เจ้าของ=`admin`, ผู้จัดการ=`manager`, แคชเชียร์=`cashier`, ครัว=`kitchen`, เสิร์ฟ=`staff` | — |
+| **โต๊ะในร้าน** | 30 โต๊ะ (รองรับ ย้าย / รวม Merge / แยก Split) | รองรับ `session_tables` แบบ 1 session มีได้หลายโต๊ะเมื่อทำการรวมโต๊ะ (Merge) |
+| **เกณฑ์ราคาเด็ก** | ส่วนสูงต่ำกว่า 120 ซม. | คิดราคาเด็กตาม `packages.child_price` (ตัดกลุ่ม "ฟรี" ออกจากระบบ) |
+| **สิทธิ์ตามบทบาท (Role-based)** | กำหนดสิทธิ์ตาม Role โดยตรง ไม่ต้องมีตาราง per-screen granular | `admin`, `manager`, `cashier`, `kitchen`, `staff` อิงตาม RLS Matrix ฉบับใหม่ |
+| **ออกบัตรคิว / เปิดโต๊ะ / คิดเงิน** | หน้าที่ของ `cashier`, `manager`, `admin` | `staff` ทำหน้าที่บริการ: ย้าย/รวม/แยกโต๊ะ, ทำความสะอาด, ชั่งเนื้อเหลือ, รับแจ้งเตือน |
+| **การรับออเดอร์แทนลูกค้า** | ย้ายไป Phase 2 (Out of Scope) | Phase 1 ลูกค้าสั่งอาหารผ่าน Mobile Web สแกน QR โต๊ะ 100% |
+| **ค่าบริการ (Service Charge)** | ตัดออกจากระบบถาวร (ไม่มี Service Charge) | ใน `packages`, `bills`, UI ไม่มีฟิลด์ Service Charge |
+| **เมนูหมด** | หน้าลูกค้าแสดงสถานะ "หมด" กดสั่งไม่ได้ (ไม่ซ่อนการ์ด) | `availability_status` = `'out_of_stock'` หรือ `'manual_off'` |
+| **ยกเลิกรายการ `cooking`** | คืนสต็อกตามสูตร BOM | ใช้ `movement_type = 'cancel_return'` ในตาราง `stock_movements` |
+| **การให้ส่วนลด** | `cashier`, `manager`, `admin` กรอกได้เอง | ต้องระบุเหตุผลและบันทึกลงใน Audit Log เสมอ |
+| **อายุ QR Token** | เพิกถอนตอน Session สถานะ `closed` เท่านั้น | `is_revoked = true` โดย Trigger เมื่อ Session ปิดรอบ ช่วง `expired` ยังดูสถานะและสรุปรายการได้ |
+| **Split Payment** | บันทึกแยกรายการชำระเงินหลายรูปแบบได้ | ตาราง `payments` ปลด UNIQUE บน `bill_id` เพื่อรองรับหลายแถวต่อ 1 บิล และตรวจ `SUM(amount) = bills.total_amount` |

@@ -3,7 +3,7 @@
 ---
 
 # KURO POS — Data Dictionary
-> **พจนานุกรมข้อมูลฐานข้อมูล Supabase PostgreSQL (28 ตาราง)**  
+> **พจนานุกรมข้อมูลฐานข้อมูล Supabase PostgreSQL (30 ตาราง)**  
 > **โมเดลธุรกิจ:** ร้านบุฟเฟต์ชาบู (สุกี้ตี๋น้อย Model) | **Version:** 1.8
 
 ---
@@ -12,7 +12,7 @@
 
 ## สารบัญโครงสร้างตาราง (7 หมวดหมู่)
 1. [หมวดที่ 1: ผู้ใช้และความปลอดภัย (Identity & Access)](#1-หมวดผู้ใช้และความปลอดภัย) — `profiles`, `audit_logs`, `app_settings`
-2. [หมวดที่ 2: โต๊ะและรอบบริการ (Tables & Sessions)](#2-หมวดโต๊ะและรอบบริการ) — `dining_tables`, `packages`, `sessions`, `session_tables`, `qr_access_tokens`, `qr_pin_attempts`
+2. [หมวดที่ 2: โต๊ะและรอบบริการ (Tables & Sessions)](#2-หมวดโต๊ะและรอบบริการ) — `dining_tables`, `packages`, `sessions`, `session_tables`, `qr_access_tokens`
 3. [หมวดที่ 3: เมนูและสูตรตัดสต็อก (Menu & BOM)](#3-หมวดเมนูและสูตรตัดสต็อก) — `categories`, `menu_items`, `package_menu_items`, `menu_item_options`, `menu_ingredients`
 4. [หมวดที่ 4: การสั่งอาหารและครัว (Ordering & Kitchen)](#4-หมวดการสั่งอาหารและครัว) — `orders`, `order_items`, `order_item_options`
 5. [หมวดที่ 5: บิล ชำระเงิน ค่าปรับ และภาษี (Billing & Tax)](#5-หมวดบิล-ชำระเงิน-ค่าปรับ-และภาษี) — `bills`, `bill_items`, `payments`, `payment_attempts`, `leftover_records`, `tax_invoices`
@@ -31,6 +31,7 @@
 | `id` | UUID | NO | - | รหัสผู้ใช้ตรงกับ Supabase Auth ID |
 | `full_name` | VARCHAR(100) | NO | - | ชื่อ-นามสกุลพนักงาน |
 | `role` | VARCHAR(20) | NO | - | บทบาท: `admin`, `manager`, `staff`, `kitchen`, `cashier` |
+| `pin_hash` | VARCHAR(255) | YES | - | Hash รหัส Staff PIN (bcrypt) สำหรับล็อกอินด่วน |
 | `is_active` | BOOLEAN | NO | `true` | สถานะเปิด/ปิดการใช้งานบัญชี |
 | `created_at` | TIMESTAMPTZ | NO | `now()` | วันเวลาที่สร้าง |
 | `updated_at` | TIMESTAMPTZ | NO | `now()` | วันเวลาที่แก้ไขล่าสุด |
@@ -41,7 +42,7 @@
 | Field | Type | Null | Default | Description & Constraints |
 |---|---|---|---|---|
 | `actor_id` | UUID | YES | - | FK $\rightarrow$ `profiles.id` (ผู้กระทำ; NULL กรณีระบบ) |
-| `action` | VARCHAR(100) | NO | - | กิจกรรม: `EMERGENCY_OVERRIDE`, `APPROVE_DISCOUNT`, `CANCEL_ORDER`, etc. |
+| `action` | VARCHAR(100) | NO | - | กิจกรรม: `EMERGENCY_OVERRIDE`, `APPROVE_DISCOUNT`, `CANCEL_ORDER_ITEM`, etc. |
 | `target_entity` | VARCHAR(50) | NO | - | ชื่อตารางเป้าหมาย เช่น `orders`, `bills`, `stock_counts` |
 | `target_id` | VARCHAR(100) | YES | - | รหัสแถวที่ได้รับผลกระทบ |
 | `payload_before` | JSONB | YES | - | ข้อมูลก่อนเปลี่ยนแปลง |
@@ -54,7 +55,7 @@
 
 | Field | Type | Null | Default | Description & Constraints |
 |---|---|---|---|---|
-| `key` | VARCHAR(50) | NO | - | รหัสตั้งค่า เช่น `buffet_price_adult`, `penalty_rate_per_100g` |
+| `key` | VARCHAR(50) | NO | - | รหัสตั้งค่า เช่น `store_name`, `penalty_rate_per_100g`, `vat_rate_percent` (ราคาบุฟเฟต์อยู่ที่ `packages` เป็น Single Source of Truth) |
 | `value` | TEXT | NO | - | ค่าของการตั้งค่า |
 | `description` | TEXT | YES | - | คำอธิบาย |
 | `updated_by` | UUID | YES | - | FK $\rightarrow$ `profiles.id` (Admin ผู้แก้ไข) |
@@ -64,12 +65,12 @@
 
 ## 2. หมวดโต๊ะและรอบบริการ
 
-### 2.1 `dining_tables` (ข้อมูลโต๊ะอาหาร 20 โต๊ะ)
+### 2.1 `dining_tables` (ข้อมูลโต๊ะอาหาร 30 โต๊ะ)
 * **PK:** `id` (UUID DEFAULT `gen_random_uuid()`)
 
 | Field | Type | Null | Default | Description & Constraints |
 |---|---|---|---|---|
-| `table_number` | VARCHAR(10) | NO | - | หมายเลขโต๊ะ เช่น `T01` ถึง `T20` (UNIQUE) |
+| `table_number` | VARCHAR(10) | NO | - | หมายเลขโต๊ะ เช่น `T01` ถึง `T30` (UNIQUE) |
 | `capacity` | INT | NO | 4 | จำนวนที่นั่ง (CHECK `capacity > 0`) |
 | `status` | VARCHAR(20) | NO | `'available'` | สถานะ: `available`, `occupied`, `cleaning`, `disabled` |
 | `qr_code_url` | TEXT | NO | - | URL สั่งอาหารประจำโต๊ะ |
@@ -82,7 +83,7 @@
 |---|---|---|---|---|
 | `name` | VARCHAR(100) | NO | - | ชื่อแพ็กเกจ เช่น "Standard Shabu Buffet" |
 | `adult_price` | NUMERIC(10,2) | NO | - | ราคาผู้ใหญ่ (รวม VAT 7% แล้ว) |
-| `child_price` | NUMERIC(10,2) | NO | - | ราคาเด็ก (120-139 ซม.) |
+| `child_price` | NUMERIC(10,2) | NO | - | ราคาเด็ก (ส่วนสูงต่ำกว่า 120 ซม.) |
 | `duration_minutes` | INT | NO | 90 | ระยะเวลาบุฟเฟต์ (นาที) |
 | `is_active` | BOOLEAN | NO | `true` | เปิด/ปิดการใช้งาน |
 
@@ -104,11 +105,11 @@
 | `started_at` | TIMESTAMPTZ | YES | - | เวลาเริ่มเปิดบริการจริงและเริ่มนับเวลาถอยหลัง |
 | `expires_at` | TIMESTAMPTZ | YES | - | เวลาหมดรอบคำนวณจาก `started_at + duration` |
 | `closed_at` | TIMESTAMPTZ | YES | - | เวลาปิดรอบหลังชำระเงิน |
-| `created_by` | UUID | NO | - | FK $\rightarrow$ `profiles.id` (Staff ผู้เปิดรอบ) |
+| `created_by` | UUID | NO | - | FK $\rightarrow$ `profiles.id` (Cashier หรือ Manager/Admin ผู้เปิดรอบ) |
 
 ### 2.4 `session_tables` (การผูกโต๊ะและประวัติย้าย/รวม/แยกโต๊ะ)
 * **PK:** `id` (UUID DEFAULT `gen_random_uuid()`)
-* **Partial Unique Indexes:** 1 โต๊ะมี active session ได้ $\le$ 1, 1 session มี active table ได้ $\le$ 1
+* **Partial Unique Indexes:** 1 โต๊ะมี active session ได้ $\le$ 1 (`UNIQUE (table_id) WHERE is_active = true`), ส่วน 1 session สามารถมี active tables ได้หลายโต๊ะเมื่อทำการรวมโต๊ะ (Merge Tables)
 
 | Field | Type | Null | Default | Description & Constraints |
 |---|---|---|---|---|
@@ -117,7 +118,7 @@
 | `is_active` | BOOLEAN | NO | `true` | โต๊ะที่กำลังใช้งานอยู่ปัจจุบันของ Session |
 | `assigned_at` | TIMESTAMPTZ | NO | `now()` | เวลาเริ่มผูกโต๊ะนี้ |
 | `released_at` | TIMESTAMPTZ | YES | - | เวลาปล่อยโต๊ะ (ย้ายออกหรือปิดรอบ) |
-| `transferred_by` | UUID | YES | - | FK $\rightarrow$ `profiles.id` (Staff ผู้ทำรายการย้าย) |
+| `transferred_by` | UUID | YES | - | FK $\rightarrow$ `profiles.id` (Cashier/Staff ผู้ทำรายการย้าย/รวม/แยก) |
 
 ### 2.5 `qr_access_tokens` (Token ตรวจสอบสิทธิ์สั่งอาหารของลูกค้า)
 * **PK:** `id` (UUID DEFAULT `gen_random_uuid()`)
@@ -126,19 +127,8 @@
 |---|---|---|---|---|
 | `session_id` | UUID | NO | - | FK $\rightarrow$ `sessions.id` ON DELETE CASCADE |
 | `token_hash` | VARCHAR(255) | NO | - | Hash Token (UNIQUE) ไม่ต้องใช้ PIN |
-| `is_revoked` | BOOLEAN | NO | `false` | เพิกถอนทันทีเมื่อปิด Session (`closed`) |
-| `expires_at` | TIMESTAMPTZ | NO | - | เวลาหมดอายุ อ้างอิง `sessions.expires_at` |
-
-### 2.6 `qr_pin_attempts` (ประวัติการเข้าถึง Audit Trail)
-* **PK:** `id` (UUID DEFAULT `gen_random_uuid()`)
-
-| Field | Type | Null | Default | Description & Constraints |
-|---|---|---|---|---|
-| `session_id` | UUID | NO | - | FK $\rightarrow$ `sessions.id` ON DELETE CASCADE |
-| `is_successful` | BOOLEAN | NO | - | ผลการตรวจสอบ |
-| `client_ip` | VARCHAR(50) | YES | - | IP Address ลูกค้า |
-| `user_agent` | TEXT | YES | - | Browser Client |
-| `attempted_at` | TIMESTAMPTZ | NO | `now()` | วันเวลาที่เรียกเข้าถึง |
+| `is_revoked` | BOOLEAN | NO | `false` | เพิกถอนทันทีเมื่อปิด Session (`closed`) เท่านั้น |
+| `expires_at` | TIMESTAMPTZ | YES | NULL | เวลาหมดอายุ (เพิกถอนด้วย `is_revoked = true` เมื่อ Session สถานะ `closed` เท่านั้น) |
 
 ---
 
@@ -206,8 +196,8 @@
 |---|---|---|---|---|
 | `session_id` | UUID | NO | - | FK $\rightarrow$ `sessions.id` ON DELETE CASCADE |
 | `order_number` | VARCHAR(30) | NO | - | เลขคำสั่งซื้อ เช่น `ORD-20261112-001` (UNIQUE) |
-| `order_source` | VARCHAR(20) | NO | `'customer_qr'` | ช่องทาง: `customer_qr`, `staff_assist` |
-| `created_by` | UUID | YES | - | FK $\rightarrow$ `profiles.id` (Staff ผู้รับแทน; NULL หากลูกค้าสั่ง) |
+| `order_source` | VARCHAR(20) | NO | `'customer_qr'` | ช่องทาง: `'customer_qr'` (ลูกค้าสั่งเองผ่าน QR โต๊ะ 100% ในเฟสแรก) |
+| `created_by` | UUID | YES | - | FK $\rightarrow$ `profiles.id` (สงวนสำหรับ Phase 2 กรณีสั่งแทน) |
 | `created_at` | TIMESTAMPTZ | NO | `now()` | วันเวลาที่สั่ง |
 
 ### 4.2 `order_items` (รายการอาหารในออเดอร์และสถานะ KDS)
@@ -269,13 +259,14 @@
 | `total_price` | NUMERIC(10,2) | NO | - | ราคารวมรายการ |
 
 ### 5.3 `payments` (ประวัติการชำระเงินสำเร็จ)
-* **PK:** `id` (UUID DEFAULT `gen_random_uuid()`) | **UK:** `bill_id`
+* **PK:** `id` (UUID DEFAULT `gen_random_uuid()`)
+* **Split Payment:** ไม่ใช้ UNIQUE บน `bill_id` เพื่อรองรับการชำระเงินหลายรูปแบบต่อ 1 บิล (ตรวจสอบ `SUM(amount_paid) = bills.total_amount`)
 
 | Field | Type | Null | Default | Description & Constraints |
 |---|---|---|---|---|
-| `bill_id` | UUID | NO | - | FK $\rightarrow$ `bills.id` (UNIQUE) |
-| `payment_method` | VARCHAR(20) | NO | - | ช่องทาง: `cash`, `promptpay`, `credit_card`, `split` |
-| `amount_paid` | NUMERIC(10,2) | NO | - | จำนวนเงินที่ชำระ |
+| `bill_id` | UUID | NO | - | FK $\rightarrow$ `bills.id` |
+| `payment_method` | VARCHAR(20) | NO | - | ช่องทาง: `cash`, `promptpay`, `credit_card` |
+| `amount_paid` | NUMERIC(10,2) | NO | - | จำนวนเงินที่ชำระ (CHECK `amount_paid > 0`) |
 | `status` | VARCHAR(20) | NO | `'settled'` | สถานะ: `settled` |
 | `verified_by` | UUID | NO | - | FK $\rightarrow$ `profiles.id` (Cashier ผู้รับเงิน) |
 | `verified_at` | TIMESTAMPTZ | NO | `now()` | เวลาที่ยืนยันชำระเงิน |
@@ -340,7 +331,7 @@
 | `ingredient_id` | UUID | NO | - | FK $\rightarrow$ `ingredients.id` |
 | `order_item_id` | UUID | YES | - | FK $\rightarrow$ `order_items.id` (ผูกกับจานที่ตัด/คืนสต็อก) |
 | `stock_count_id` | UUID | YES | - | FK $\rightarrow$ `stock_counts.id` (ผูกกับการปรับยอดตรวจนับ) |
-| `movement_type` | VARCHAR(30) | NO | - | ประเภท: `actual_consumption`, `stock_count_adjustment`, `kitchen_waste`, `manual_restock`, `cancel_return` (ชื่อเสนอใหม่ สำหรับคืนสต็อกเมื่อยกเลิก) |
+| `movement_type` | VARCHAR(30) | NO | - | ประเภท: `actual_consumption`, `stock_count_adjustment`, `kitchen_waste`, `manual_restock`, `cancel_return` (คืนสต็อกเมื่อยกเลิกออเดอร์) |
 | `quantity` | NUMERIC(12,3) | NO | - | ปริมาณ (ค่าลบ = ตัดออก, ค่าบวก = เพิ่มเข้า) |
 | `balance_after` | NUMERIC(12,3) | NO | - | ยอดคงเหลือหลังทำรายการ |
 | `reason` | TEXT | YES | - | เหตุผลประกอบ |

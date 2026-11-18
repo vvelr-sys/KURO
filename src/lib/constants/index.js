@@ -4,7 +4,8 @@
  */
 
 export const USER_ROLES = {
-  OWNER: 'owner',
+  ADMIN: 'admin',
+  OWNER: 'admin',
   MANAGER: 'manager',
   CASHIER: 'cashier',
   KITCHEN: 'kitchen',
@@ -62,5 +63,26 @@ export const PAYMENT_METHODS = {
 };
 
 export const PENALTY_RATE_PER_100G = 100.00;
+
+/**
+ * Route access permissions per role (Item 12: Route -> Allowed Roles)
+ * Server-side & layout checks enforce these without "Admin passes everything" rule
+ */
+export const ROUTE_PERMISSIONS = {
+  '/queues': ['cashier', 'manager', 'admin'],
+  '/tables': ['cashier', 'staff', 'manager', 'admin'],
+  '/billing': ['cashier', 'manager', 'admin'],
+  '/billing/tax-invoice': ['cashier', 'manager', 'admin'],
+  '/service-requests': ['staff', 'manager', 'admin'],
+  '/kds': ['kitchen', 'manager', 'admin'],
+  '/stock-override': ['kitchen', 'manager', 'admin'],
+  '/menu': ['manager', 'admin'],
+  '/packages': ['admin'],
+  '/inventory': ['manager', 'admin'],
+  '/reports': ['manager', 'admin'],
+  '/staff': ['admin'],
+  '/audit-logs': ['admin', 'manager'],
+  '/settings': ['admin'],
+};
 
 
