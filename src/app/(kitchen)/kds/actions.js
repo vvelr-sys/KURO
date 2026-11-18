@@ -190,22 +190,74 @@ export async function updateOrderItemStatus(itemId, newStatus, cancelReason) {
   try {
     const supabase = await createClient();
 
-    // กฎธุรกิจ: ถ้ากด 'served' (เสิร์ฟแล้ว) ให้แวะสถานะ 'cooking' ก่อน เพื่อให้ระบบตัดสต็อกวัตถุดิบ
-    if (newStatus === 'served') {
+    // ดึงสถานะเดิมเพื่อนำมาตรวจสอบเงื่อนไขธุรกิจ
+    const { data: currentItem } = await supabase
+      .from('order_items')
+      .select('status, menu_item_id, quantity')
+      .eq('id', itemId)
+      .single();
+
+    // กฎธุรกิจ: ถ้ากด 'served' (เสิร์ฟแล้ว) ให้แวะสถานะ 'cooking' ก่อน เพื่อให้ระบบตัดสต็อกวัตถุดิบ (BOM)
+    if (newStatus === 'served' && currentItem?.status === 'pending') {
       await supabase
         .from('order_items')
         .update({ status: 'cooking' })
-        .eq('id', itemId)
-        .eq('status', 'pending');
+        .eq('id', itemId);
     }
 
     // ข้อมูลที่จะอัปเดต
     const updatePayload = { status: newStatus };
 
-    // ถ้าเป็นการยกเลิก ให้บันทึกเหตุผลและเวลาที่ยกเลิกด้วย
+    // ถ้าเป็นการยกเลิก (cancelled)
     if (newStatus === 'cancelled') {
       updatePayload.cancelled_reason = cancelReason ? cancelReason.trim() : 'ไม่ระบุเหตุผล';
       updatePayload.cancelled_at = new Date().toISOString();
+
+      // กฎธุรกิจ FR-033: หากเดิมอยู่ในสถานะ 'cooking' (ตัดสต็อกไปแล้ว) ต้องคืนสต็อกตามสูตร BOM (cancel_return)
+      if (currentItem && currentItem.status === 'cooking') {
+        const { data: boms } = await supabase
+          .from('menu_ingredients')
+          .select('ingredient_id, quantity_required')
+          .eq('menu_item_id', currentItem.menu_item_id);
+
+        if (boms && boms.length > 0) {
+          for (const bom of boms) {
+            const returnQty = bom.quantity_required * currentItem.quantity;
+
+            const { data: ing } = await supabase
+              .from('ingredients')
+              .select('current_stock')
+              .eq('id', bom.ingredient_id)
+              .single();
+
+            if (ing) {
+              const newBalance = Number(ing.current_stock) + Number(returnQty);
+              await supabase
+                .from('ingredients')
+                .update({ current_stock: newBalance })
+                .eq('id', bom.ingredient_id);
+
+              await supabase.from('stock_movements').insert({
+                ingredient_id: bom.ingredient_id,
+                order_item_id: itemId,
+                movement_type: 'cancel_return',
+                quantity: returnQty,
+                balance_after: newBalance,
+                reason: `ยกเลิกออเดอร์ในครัว: ${cancelReason || 'ไม่ระบุเหตุผล'}`,
+              });
+            }
+          }
+        }
+      }
+
+      // บันทึก Audit Log (CANCEL_ORDER_ITEM) ตาม Audit Matrix
+      await supabase.from('audit_logs').insert({
+        action: 'CANCEL_ORDER_ITEM',
+        target_entity: 'order_items',
+        target_id: itemId,
+        reason: cancelReason || 'ยกเลิกรายการอาหารในครัว',
+        payload_after: { status: 'cancelled', reason: cancelReason },
+      });
     }
 
     const { error } = await supabase
@@ -258,7 +310,7 @@ export async function markAllServed(orderId) {
   try {
     const supabase = await createClient();
 
-    // 1. ตัดสต็อกวัตถุดิบสำหรับจานที่ยังรอทำอยู่
+    // 1. ตัดสต็อกวัตถุดิบสำหรับจานที่ยังรอทำอยู่ (pending -> cooking)
     await supabase
       .from('order_items')
       .update({ status: 'cooking' })

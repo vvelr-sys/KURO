@@ -834,6 +834,8 @@ CREATE POLICY "staff_manage_leftover" ON leftover_records FOR ALL USING (fn_my_r
 CREATE POLICY "kitchen_read_orders" ON orders FOR SELECT USING (true);
 CREATE POLICY "kitchen_read_items" ON order_items FOR SELECT USING (true);
 CREATE POLICY "kitchen_update_items" ON order_items FOR UPDATE USING (fn_my_role() IN ('admin', 'manager', 'kitchen', 'staff'));
+CREATE POLICY "kitchen_read_menu_items" ON menu_items FOR SELECT USING (fn_my_role() IN ('admin', 'manager', 'kitchen', 'cashier', 'staff'));
+CREATE POLICY "kitchen_update_menu_override" ON menu_items FOR UPDATE USING (fn_my_role() IN ('admin', 'manager', 'kitchen'));
 
 -- 6. Cashier Operations
 CREATE POLICY "cashier_manage_bills" ON bills FOR ALL USING (fn_my_role() IN ('admin', 'manager', 'cashier'));

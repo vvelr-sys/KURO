@@ -56,6 +56,16 @@ export async function toggleMenuAvailability(menuItemId, newAvailability) {
       return { success: false, error: error.message };
     }
 
+    // บันทึก Audit Log เมื่อทำการปิดเมนูด้วยมือ (MANUAL_OFF_MENU)
+    if (newAvailability === 'manual_off') {
+      await supabase.from('audit_logs').insert({
+        action: 'MANUAL_OFF_MENU',
+        target_entity: 'menu_items',
+        target_id: menuItemId,
+        reason: 'ครัวหรือผู้จัดการปิดขายเมนูชั่วคราว (Manual Off)',
+      });
+    }
+
     revalidatePath('/(kitchen)/stock-override');
     return { success: true, error: null };
   } catch (err) {
