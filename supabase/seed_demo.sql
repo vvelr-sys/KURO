@@ -8,7 +8,7 @@
 -- ############################################################
 --
 -- KURO POS — Seed ข้อมูลจำลองการใช้งาน (Demo Data) v1.8
--- ลำดับการรัน: migrations/002_v18_fixes.sql → สร้างบัญชี (seed_profiles.sql หรือ scripts/seed-users.mjs) → seed_master.sql → seed_demo.sql (ไฟล์นี้)
+-- ลำดับการรัน: migrations/002 → 003 → 004 → สร้างบัญชี (seed_profiles.sql หรือ scripts/seed-users.mjs) → seed_master.sql → seed_demo.sql (ไฟล์นี้)
 -- รีเซ็ตข้อมูลเมื่อทดสอบจนเละ: รันไฟล์นี้ซ้ำได้ทันที (ทั้งไฟล์อยู่ใน Transaction เดียว
 --   ถ้าผิดพลาดตรงไหนจะ ROLLBACK ทั้งหมด ข้อมูลเดิมไม่เสีย)
 --
@@ -32,6 +32,12 @@ DO $$
 DECLARE
     v_role user_role;
 BEGIN
+    -- migration 003 ต้องรันแล้ว (คิวแยกผู้ใหญ่/เด็ก)
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'public' AND table_name = 'queues' AND column_name = 'adult_count') THEN
+        RAISE EXCEPTION 'ยังไม่ได้รัน "supabase/migrations/003_queue_guests_tax_invoice.sql" — รันก่อนแล้วค่อยรันไฟล์นี้ใหม่';
+    END IF;
+
     FOREACH v_role IN ARRAY ARRAY['admin', 'manager', 'cashier', 'staff', 'kitchen']::user_role[] LOOP
         IF NOT EXISTS (SELECT 1 FROM profiles WHERE role = v_role) THEN
             RAISE EXCEPTION 'ไม่พบผู้ใช้ตำแหน่ง "%" ในตาราง profiles — ต้องสร้างบัญชีทดสอบก่อน (supabase/seed_profiles.sql หรือ node scripts/seed-users.mjs ดู docs/SEED.md ข้อ 2) แล้วค่อยรันไฟล์นี้ใหม่', v_role;
@@ -314,10 +320,11 @@ END $$;
 -- ขั้นที่ 5: คิวหน้าร้าน 3 รายการ (waiting / called / seated)
 --   เลขคิว: A = โต๊ะเล็ก (1-2), B = กลาง (3-4), C = ใหญ่ (5+)
 -- ============================================================
-INSERT INTO queues (id, queue_number, guest_count, table_size, status, phone_number, called_at, seated_at, created_at) VALUES
-    ('a1000000-0000-4000-8000-000000000001', 'B01', 3, 'medium', 'seated',  NULL,         now() - interval '5 minutes', now(), now() - interval '30 minutes'),
-    ('a1000000-0000-4000-8000-000000000002', 'A01', 2, 'small',  'called',  NULL,         now() - interval '2 minutes', NULL,  now() - interval '20 minutes'),
-    ('a1000000-0000-4000-8000-000000000003', 'C01', 6, 'large',  'waiting', '0800000000', NULL,                         NULL,  now() - interval '8 minutes')
+--   B01 = ผู้ใหญ่ 2 เด็ก 1 ตรงกับ Session A (T01) ที่เปิดจากคิวนี้
+INSERT INTO queues (id, queue_number, guest_count, adult_count, child_count, table_size, status, phone_number, called_at, seated_at, created_at) VALUES
+    ('a1000000-0000-4000-8000-000000000001', 'B01', 3, 2, 1, 'medium', 'seated',  NULL,         now() - interval '5 minutes', now(), now() - interval '30 minutes'),
+    ('a1000000-0000-4000-8000-000000000002', 'A01', 2, 2, 0, 'small',  'called',  NULL,         now() - interval '2 minutes', NULL,  now() - interval '20 minutes'),
+    ('a1000000-0000-4000-8000-000000000003', 'C01', 6, 4, 2, 'large',  'waiting', '0800000000', NULL,                         NULL,  now() - interval '8 minutes')
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================

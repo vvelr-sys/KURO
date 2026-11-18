@@ -14,6 +14,8 @@
 | [`supabase/seed_profiles.sql`](../supabase/seed_profiles.sql) | ผูกบัญชีทดสอบที่สร้างใน Dashboard เข้ากับ `profiles` (วิธี A ไม่ต้องใช้ Service Role Key) | ✅ upsert ตาม id |
 | [`scripts/seed-users.mjs`](../scripts/seed-users.mjs) | สร้างบัญชีพนักงานทดสอบ 5 ตำแหน่งใน Supabase Auth + `profiles` (วิธี B ต้องใช้ Service Role Key) | ✅ บัญชีที่มีอยู่แล้วจะข้าม (ไม่เปลี่ยนรหัสผ่าน) แต่ upsert `profiles` ทุกครั้ง |
 | [`supabase/migrations/002_v18_fixes.sql`](../supabase/migrations/002_v18_fixes.sql) | แก้ schema ให้ตรง v1.8: ลูกค้าเห็นเมนู "หมด", VAT อ่านจาก app_settings, Trigger คืนสต็อกตอนยกเลิก, ตรวจยอดชำระก่อนปิดบิล | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
+| [`supabase/migrations/003_queue_guests_tax_invoice.sql`](../supabase/migrations/003_queue_guests_tax_invoice.sql) | คิวแยกผู้ใหญ่/เด็ก (`adult_count`, `child_count`), เลขที่ใบกำกับภาษีอัตโนมัติ (`invoice_number`), อีเมลผู้รับใบกำกับภาษี | ✅ รันซ้ำได้ แถวคิวเดิมถือเป็นผู้ใหญ่ทั้งหมด |
+| [`supabase/migrations/004_protect_profiles.sql`](../supabase/migrations/004_protect_profiles.sql) | ปิดช่องโหว่ `profiles`: อ่านได้เฉพาะพนักงานที่ล็อกอิน และไม่มีใครอ่าน `pin_hash` ผ่าน API ได้ | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
 | [`supabase/seed_master.sql`](../supabase/seed_master.sql) | ข้อมูลหลัก: ตั้งค่า VAT/ค่าปรับ, แพ็กเกจ, โต๊ะ T01-T08, หมวด, วัตถุดิบ, เมนู, ตัวเลือก, BOM, อัตราใช้ต่อหัว | ✅ รันซ้ำ = รีเซ็ตข้อมูลหลักกลับค่าตั้งต้น (ยกเว้นสถานะโต๊ะ) |
 | [`supabase/seed_demo.sql`](../supabase/seed_demo.sql) | ล้างข้อมูลการใช้งาน แล้วใส่ข้อมูลจำลอง (คิว, 3 โต๊ะกำลังใช้งาน, ออเดอร์, บิล, ประวัติ 7 วัน ฯลฯ) | ✅ ทั้งไฟล์อยู่ใน Transaction เดียว ผิดพลาดตรงไหน ROLLBACK ทั้งหมด |
 
@@ -23,7 +25,7 @@
 
 | ลำดับ | ทำอะไร | ที่ไหน |
 |:---:|---|---|
-| 0 | `supabase/migrations/002_v18_fixes.sql` (แก้ schema ครั้งเดียว หลัง `001_initial_schema.sql`) | SQL Editor |
+| 0 | `supabase/migrations/002_v18_fixes.sql` → `003_queue_guests_tax_invoice.sql` → `004_protect_profiles.sql` (แก้ schema ครั้งเดียว หลัง `001_initial_schema.sql`) | SQL Editor |
 | 1 | สร้างบัญชีทดสอบ 5 ตำแหน่ง — เลือก **วิธี A** หรือ **วิธี B** ด้านล่าง | Dashboard / Terminal |
 | 2 | `supabase/seed_master.sql` | SQL Editor |
 | 3 | `supabase/seed_demo.sql` (เฉพาะฐานข้อมูลพัฒนา/ทดสอบ) | SQL Editor |
@@ -106,11 +108,14 @@ union all select 'audit_logs', count(*) from audit_logs;
 > - ถ้ารัน `seed_demo.sql` ก่อนสร้างบัญชีครบ 5 ตำแหน่ง ไฟล์จะหยุดพร้อมข้อความ "ไม่พบผู้ใช้ตำแหน่ง ..." และไม่มีข้อมูลใดถูกลบ
 > - ใช้ฐานข้อมูลร่วมกัน: ถ้าใครรัน `seed_demo.sql` ข้อมูลทดสอบของทุกคนถูกรีเซ็ตพร้อมกัน — บอกทีมก่อนรัน
 
-### 2.4 ข้อตกลงสำหรับคนเขียนโค้ด (ผลจาก migration 002)
+### 2.4 ข้อตกลงสำหรับคนเขียนโค้ด (ผลจาก migration 002-004)
 
 - Server Action ที่เปลี่ยนสถานะอาหารเป็น `cooking` ต้องใช้ Supabase client ที่มี session ของพนักงาน (`src/lib/supabase/server.js`) — **ห้ามใช้ admin/service role** เพราะ Trigger ตัดสต็อกต้องรู้ว่าใครกด (ถ้าไม่มีจะ error)
 - `payments.amount_paid` = ยอดที่หักจากบิล (ไม่ใช่เงินสดที่ลูกค้ายื่น) และเปลี่ยนบิลเป็น `paid` ได้เมื่อผลรวมการชำระเท่ากับ `total_amount` เท่านั้น
 - ลูกค้าอ่านเมนูได้ทุกสถานะ — หน้าลูกค้าต้องแสดง "หมด" เอง และ Server Action รับออเดอร์ต้องตรวจซ้ำว่าเมนู `available`
+- ออกบัตรคิวต้องส่ง `adult_count`, `child_count` และ `guest_count` (= ผลรวม) ครบทั้ง 3 ค่า ถ้าไม่ตรงกันฐานข้อมูลจะไม่รับ
+- **ห้ามใช้ `.select('*')` กับตาราง `profiles`** — ต้องระบุคอลัมน์ เช่น `.select('id, full_name, role, is_active')` (migration 004 ซ่อน `pin_hash` ถ้าใช้ `*` จะได้ error "permission denied")
+- ออกใบกำกับภาษี **ไม่ต้องส่ง** `invoice_number` — Trigger สร้างเลข `TAX-YYYYMMDD-NNNN` ให้เอง (เริ่ม 0001 ใหม่ทุกวัน ตามเวลาไทย)
 
 ## 3. วิธีรีเซ็ตเมื่อทดสอบจนข้อมูลเละ
 
@@ -152,11 +157,11 @@ union all select 'audit_logs', count(*) from audit_logs;
 
 ### หน้าดูคิวของลูกค้า `/queue/[queueId]`
 
-| เลขคิว | สถานะ | คน / ขนาดโต๊ะ | URL |
+| เลขคิว | สถานะ | ผู้ใหญ่ + เด็ก / ขนาดโต๊ะ | URL |
 |---|---|---|---|
-| `C01` | `waiting` | 6 / large | `/queue/a1000000-0000-4000-8000-000000000003` |
-| `A01` | `called` | 2 / small | `/queue/a1000000-0000-4000-8000-000000000002` |
-| `B01` | `seated` | 3 / medium | `/queue/a1000000-0000-4000-8000-000000000001` |
+| `C01` | `waiting` | 4 + 2 / large | `/queue/a1000000-0000-4000-8000-000000000003` |
+| `A01` | `called` | 2 + 0 / small | `/queue/a1000000-0000-4000-8000-000000000002` |
+| `B01` | `seated` | 2 + 1 / medium | `/queue/a1000000-0000-4000-8000-000000000001` |
 
 ## 6. ข้อมูลที่ seed ไว้ และใช้ทดสอบหน้าไหน
 

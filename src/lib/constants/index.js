@@ -85,4 +85,26 @@ export const ROUTE_PERMISSIONS = {
   '/settings': ['admin'],
 };
 
+/**
+ * หน้าแรกหลังล็อกอินของแต่ละตำแหน่ง (ใช้ตอนล็อกอินสำเร็จ และตอนเข้าหน้าที่ไม่มีสิทธิ์)
+ */
+export const ROLE_HOME_PATH = {
+  admin: '/reports',
+  manager: '/reports',
+  cashier: '/tables',
+  staff: '/tables',
+  kitchen: '/kds',
+};
+
+/**
+ * ชื่อตำแหน่งภาษาไทยสำหรับแสดงบนหน้าจอ
+ */
+export const ROLE_LABELS = {
+  admin: 'ผู้ดูแลระบบ',
+  manager: 'ผู้จัดการ',
+  cashier: 'แคชเชียร์',
+  staff: 'พนักงานบริการ',
+  kitchen: 'ครัว',
+};
+
 

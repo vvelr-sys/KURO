@@ -31,7 +31,7 @@
 | `id` | UUID | NO | - | รหัสผู้ใช้ตรงกับ Supabase Auth ID |
 | `full_name` | VARCHAR(100) | NO | - | ชื่อ-นามสกุลพนักงาน |
 | `role` | VARCHAR(20) | NO | - | บทบาท: `admin`, `manager`, `staff`, `kitchen`, `cashier` |
-| `pin_hash` | VARCHAR(255) | YES | - | Hash รหัส Staff PIN (bcrypt) สำหรับล็อกอินด่วน |
+| `pin_hash` | VARCHAR(255) | YES | - | Hash รหัส Staff PIN (bcrypt) สำหรับล็อกอินด่วน — **อ่านผ่าน API ไม่ได้** (migration 004) |
 | `is_active` | BOOLEAN | NO | `true` | สถานะเปิด/ปิดการใช้งานบัญชี |
 | `created_at` | TIMESTAMPTZ | NO | `now()` | วันเวลาที่สร้าง |
 | `updated_at` | TIMESTAMPTZ | NO | `now()` | วันเวลาที่แก้ไขล่าสุด |
@@ -301,10 +301,12 @@
 | Field | Type | Null | Default | Description & Constraints |
 |---|---|---|---|---|
 | `bill_id` | UUID | NO | - | FK $\rightarrow$ `bills.id` ON DELETE CASCADE (UNIQUE) |
+| `invoice_number` | VARCHAR(30) | NO | Trigger | เลขที่ใบกำกับภาษี `TAX-YYYYMMDD-NNNN` (UNIQUE) สร้างอัตโนมัติโดย `fn_set_tax_invoice_number` — เพิ่มใน migration 003 |
 | `customer_name` | VARCHAR(200) | NO | - | ชื่อบุคคลหรือชื่อนิติบุคคล |
 | `tax_id` | VARCHAR(20) | NO | - | เลขประจำตัวผู้เสียภาษี 13 หลัก |
 | `branch` | VARCHAR(50) | NO | `'สำนักงานใหญ่'` | สาขาที่ออก |
 | `address` | TEXT | NO | - | ที่อยู่ตามทะเบียนภาษี |
+| `email` | VARCHAR(255) | YES | - | อีเมลผู้รับเอกสาร (ไม่บังคับ ตรวจรูปแบบอย่างง่าย) — เพิ่มใน migration 003 |
 | `issued_by` | UUID | NO | - | FK $\rightarrow$ `profiles.id` (Cashier ผู้ออกเอกสาร) |
 | `created_at` | TIMESTAMPTZ | NO | `now()` | วันเวลาที่ออกเอกสาร |
 
@@ -389,7 +391,9 @@
 | Field | Type | Null | Default | Description & Constraints |
 |---|---|---|---|---|
 | `queue_number` | VARCHAR(10) | NO | - | หมายเลขคิว เช่น `A01`, `B05` |
-| `guest_count` | INT | NO | 1 | จำนวนลูกค้า (CHECK `> 0`) |
+| `guest_count` | INT | NO | 1 | จำนวนลูกค้ารวม (CHECK `> 0` และ `= adult_count + child_count`) |
+| `adult_count` | INT | NO | 1 | จำนวนผู้ใหญ่ (CHECK `>= 0`) — เพิ่มใน migration 003 |
+| `child_count` | INT | NO | 0 | จำนวนเด็ก ส่วนสูงต่ำกว่า 120 ซม. (CHECK `>= 0`) — เพิ่มใน migration 003 |
 | `table_size` | VARCHAR(10) | NO | `'small'` | ขนาดโต๊ะ: `small` (1-2), `medium` (3-4), `large` (5+) |
 | `status` | VARCHAR(20) | NO | `'waiting'` | สถานะ: `waiting`, `called`, `seated`, `skipped`, `cancelled` |
 | `phone_number` | VARCHAR(20) | YES | - | เบอร์โทรศัพท์ลูกค้า (สำหรับ SMS/LINE ไม่บังคับ) |
