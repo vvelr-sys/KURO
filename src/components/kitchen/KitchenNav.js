@@ -7,7 +7,8 @@ import { ChefHat, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /**
- * KitchenNav — แถบนำทางด้านล่างแบบ Clean Minimal
+ * KitchenNav — แถบนำทางด้านล่างสำหรับครัว
+ * ธีม KURO SHABU สีแดงเข้ม
  */
 export default function KitchenNav() {
   const pathname = usePathname();
@@ -16,22 +17,20 @@ export default function KitchenNav() {
     {
       href: '/kds',
       label: 'จอออเดอร์ KDS',
-      emoji: '🍲',
       icon: ChefHat,
       isActive: pathname.startsWith('/kds'),
     },
     {
       href: '/stock-override',
       label: 'เปิด/ปิดเมนู',
-      emoji: '🔧',
       icon: SlidersHorizontal,
       isActive: pathname.startsWith('/stock-override'),
     },
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 shadow-lg">
-      <div className="max-w-md mx-auto flex items-center justify-around px-4 py-2 gap-2">
+    <nav className="fixed bottom-0 left-0 right-0 z-30 bg-[#1a0a0a] border-t border-red-900/50 shadow-2xl">
+      <div className="flex items-center justify-around px-4 py-2 gap-2">
         {navItems.map((item) => {
           const Icon = item.icon;
           return (
@@ -39,13 +38,13 @@ export default function KitchenNav() {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all select-none',
+                'flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all select-none',
                 item.isActive
-                  ? 'bg-gray-900 text-white shadow-sm'
-                  : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
+                  ? 'bg-[#7F1D1D] text-white shadow-md'
+                  : 'text-red-300 hover:text-white hover:bg-red-900/40'
               )}
             >
-              <Icon size={16} />
+              <Icon size={18} />
               <span>{item.label}</span>
             </Link>
           );

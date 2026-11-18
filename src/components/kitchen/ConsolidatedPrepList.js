@@ -23,7 +23,7 @@ function groupMenuForKitchen(orderList) {
 
       const menuId = item.menu_item_id;
 
-      // ถ้ายังไม่เคยนับเมนูนี้ ให้เริ่มตั้งต้นไว้ที่ 0
+      // ถ้ายังไม่เคยนับเมนูนี้ ให้เริ่มต้นไว้ที่ 0
       if (!summary[menuId]) {
         summary[menuId] = {
           menuItemId: menuId,
@@ -45,11 +45,11 @@ function groupMenuForKitchen(orderList) {
 }
 
 /**
- * หน้าจอแสดงรายการอาหารที่ต้องเตรียมรวมข้ามทุกโต๊ะ
- * ให้คนเตรียมของสามารถติ๊กช่วยจำได้ว่าหยิบของชิ้นไหนไปแล้วบ้าง
+ * หน้าจอแสดงรายการอาหารที่ต้องเตรียมรวมข้ามทุกโต๊ะ (Consolidated Prep To-Do View)
+ * ธีม KURO SHABU
  */
 const ConsolidatedPrepList = React.memo(function ConsolidatedPrepList({ orders }) {
-  // เก็บรายการที่ติ๊กเสร็จแล้ว (เป็นแค่การติ๊กช่วยจำในหน้าจอ ไม่กระทบข้อมูลจริง)
+  // เก็บรายการที่ติ๊กเสร็จแล้ว (เป็นการช่วยจำในจอ)
   const [checkedDishIds, setCheckedDishIds] = useState(new Set());
 
   // คำนวณสรุปยอดอาหารที่ต้องเตรียม
@@ -68,43 +68,42 @@ const ConsolidatedPrepList = React.memo(function ConsolidatedPrepList({ orders }
     });
   }, []);
 
-  // ฟังก์ชันล้างที่ติ๊กไว้ทั้งหมด เริ่มต้นใหม่
+  // ล้างค่าที่ติ๊กไว้ทั้งหมด
   const resetAllChecks = useCallback(() => {
     setCheckedDishIds(new Set());
   }, []);
 
-  // ถ้าไม่มีอาหารที่ต้องเตรียม
-  if (prepList.length === 0) {
+  const totalDishes = prepList.length;
+  const finishedCount = checkedDishIds.size;
+
+  if (totalDishes === 0) {
     return (
       <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center shadow-sm">
-        <span className="text-4xl block mb-2">✅</span>
-        <h3 className="text-base font-bold text-gray-800">ไม่มีรายการที่ต้องเตรียม</h3>
-        <p className="text-xs text-gray-400 mt-1">ทุกออเดอร์ในครัวทำเสร็จหมดแล้ว</p>
+        <span className="text-4xl block mb-2">✨</span>
+        <h3 className="text-base font-bold text-gray-800">ไม่มีรายการที่ต้องเตรียมในขณะนี้</h3>
+        <p className="text-xs text-gray-400 mt-1">ออเดอร์ทั้งหมดถูกจัดเสิร์ฟครบเรียบร้อยแล้ว</p>
       </div>
     );
   }
 
-  const finishedCount = checkedDishIds.size;
-  const totalDishes = prepList.length;
-
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
       {/* ส่วนหัวแสดงสรุป */}
-      <div className="flex items-center justify-between px-5 py-3.5 bg-gray-50/90 border-b border-gray-200">
+      <div className="flex items-center justify-between px-5 py-3.5 bg-gray-50 border-b border-gray-200">
         <div>
-          <h2 className="text-base font-bold text-gray-900">รวมรายการเตรียมอาหาร</h2>
-          <p className="text-xs text-gray-500 mt-0.5">รวมทุกโต๊ะ — แตะเพื่อติ๊กช่วยจำ</p>
+          <h2 className="text-base font-black text-gray-900">รวมรายการเตรียมอาหาร (Consolidated Prep)</h2>
+          <p className="text-xs text-gray-500 mt-0.5">รวมทุกโต๊ะ — แตะเพื่อติ๊กช่วยจำขณะจัดเตรียม</p>
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-white border border-gray-200 text-gray-700">
+          <span className="text-xs font-bold px-3 py-1 rounded-full bg-white border border-gray-200 text-[#7F1D1D]">
             เตรียมแล้ว {finishedCount} จาก {totalDishes} เมนู
           </span>
 
           {finishedCount > 0 && (
             <button
               onClick={resetAllChecks}
-              className="p-1 text-gray-400 hover:text-gray-700 rounded-lg transition-colors"
+              className="p-1.5 text-gray-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
               title="ล้างที่ติ๊กไว้ทั้งหมด"
             >
               <RotateCcw size={15} />
@@ -129,10 +128,10 @@ const ConsolidatedPrepList = React.memo(function ConsolidatedPrepList({ orders }
                 {/* ช่องติ๊กถูก */}
                 <div
                   className={cn(
-                    'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all border',
+                    'w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-all border-2',
                     isDone
                       ? 'bg-emerald-600 border-emerald-600 text-white'
-                      : 'border-gray-300 bg-white'
+                      : 'border-gray-300 bg-white hover:border-[#7F1D1D]'
                   )}
                 >
                   {isDone && <Check size={18} strokeWidth={2.5} />}
@@ -142,7 +141,7 @@ const ConsolidatedPrepList = React.memo(function ConsolidatedPrepList({ orders }
                 <div className="flex-1 min-w-0">
                   <span
                     className={cn(
-                      'text-base font-semibold leading-snug block',
+                      'text-base font-bold leading-snug block',
                       isDone ? 'line-through text-gray-400' : 'text-gray-900'
                     )}
                   >
@@ -158,11 +157,11 @@ const ConsolidatedPrepList = React.memo(function ConsolidatedPrepList({ orders }
                 {/* จำนวนจานทั้งหมดที่ต้องเตรียม */}
                 <span
                   className={cn(
-                    'px-2.5 py-1 rounded-lg text-sm font-bold flex-shrink-0',
-                    isDone ? 'bg-gray-100 text-gray-400' : 'bg-gray-100 text-gray-800'
+                    'px-3 py-1 rounded-full text-sm font-black flex-shrink-0',
+                    isDone ? 'bg-gray-100 text-gray-400' : 'bg-[#7F1D1D] text-white'
                   )}
                 >
-                  × {dish.totalQuantity}
+                  x {dish.totalQuantity}
                 </span>
               </div>
             </li>

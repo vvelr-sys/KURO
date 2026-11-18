@@ -1,42 +1,52 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, ChevronDown, ChevronUp, Check, X, Ban } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  RefreshCw,
+  Search,
+  RotateCcw,
+  Clock,
+  AlertTriangle,
+  SlidersHorizontal,
+  Eye,
+} from 'lucide-react';
 import { getMenuItemsWithAvailability, toggleMenuAvailability } from './actions';
+import { useKitchenRealtime } from '@/hooks/useKitchenRealtime';
 import { cn } from '@/lib/utils';
 
-/**
- * ชื่อสถานีภาษาไทย
- */
-const STATION_LABELS = {
-  fresh: { label: 'ของสด', emoji: '🥩' },
-  beverage: { label: 'เครื่องดื่ม', emoji: '🧃' },
-  grill: { label: 'ปิ้งย่าง', emoji: '🔥' },
-  hot_kitchen: { label: 'ครัวร้อน', emoji: '🍜' },
+// ─── รูปภาพตัวอย่างสำหรับเมนูชาบู (Fallback / Default Image) ───────────────
+const PLACEHOLDER_IMAGES = {
+  fresh: '🥩',
+  beverage: '🧃',
+  grill: '🔥',
+  hot_kitchen: '🍜',
 };
 
 /**
- * ป้ายสถานะเมนู (Clean Minimal)
+ * ป้ายสถานะเมนู (KURO SHABU Style)
  */
-function AvailabilityBadge({ availability }) {
+function StatusBadge({ availability }) {
   if (availability === 'available') {
     return (
-      <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-        พร้อมขาย
+      <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+        พร้อมขาย (In Stock)
       </span>
     );
   }
   if (availability === 'out_of_stock') {
     return (
-      <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200">
-        สต็อกหมด
+      <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700 border border-red-200">
+        <span className="w-2 h-2 rounded-full bg-red-500" />
+        สินค้าหมด (Out of Stock)
       </span>
     );
   }
   if (availability === 'manual_off') {
     return (
-      <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">
-        ปิดชั่วคราว
+      <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full bg-red-50 text-red-600 border border-red-200">
+        <span className="w-2 h-2 rounded-full bg-red-500" />
+        ปิดด้วยมือ (Manual Off)
       </span>
     );
   }
@@ -44,289 +54,561 @@ function AvailabilityBadge({ availability }) {
 }
 
 /**
- * Section เมนูแยกตามสถานี — Clean Structure
+ * สวิตช์เปิด/ปิดเมนูแบบ Toggle Switch
  */
-function StationSection({ stationKey, items, onToggle, pendingIds }) {
-  const [isOpen, setIsOpen] = useState(true);
-  const stationInfo = STATION_LABELS[stationKey] || { label: stationKey, emoji: '🍽️' };
-
-  const closedCount = items.filter(
-    (i) => i.availability_status === 'manual_off' || i.availability_status === 'out_of_stock'
-  ).length;
+function ToggleSwitch({ isAvailable, isOutOfStock, isPending, onToggle }) {
+  if (isOutOfStock) {
+    return (
+      <div
+        className="w-14 h-8 rounded-full bg-gray-200 flex items-center justify-start px-1.5 cursor-not-allowed opacity-50"
+        title="สต็อกหมดในระบบ ไม่สามารถเปิดขายได้"
+      >
+        <span className="w-5 h-5 rounded-full bg-white shadow-sm flex items-center justify-center text-[10px] text-gray-400 font-bold">
+          ✕
+        </span>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-      {/* Header สถานี */}
-      <button
-        onClick={() => setIsOpen((prev) => !prev)}
-        className="w-full flex items-center justify-between px-5 py-3.5 bg-gray-50/80 hover:bg-gray-100/70 border-b border-gray-200 transition-colors"
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={isPending}
+      className={cn(
+        'w-14 h-8 rounded-full transition-colors flex items-center px-1 shadow-inner relative',
+        isAvailable ? 'bg-emerald-600 justify-end' : 'bg-gray-300 justify-start',
+        isPending && 'opacity-60 cursor-wait'
+      )}
+      title={isAvailable ? 'กดเพื่อปิดขายเมนูนี้' : 'กดเพื่อเปิดขายเมนูนี้'}
+    >
+      <span
+        className={cn(
+          'w-6 h-6 rounded-full bg-white shadow-md flex items-center justify-center text-xs font-black transition-all transform',
+          isAvailable ? 'text-emerald-600' : 'text-gray-400'
+        )}
       >
-        <div className="flex items-center gap-2.5">
-          <span className="text-xl">{stationInfo.emoji}</span>
-          <span className="text-base font-bold text-gray-800">{stationInfo.label}</span>
-          <span className="text-xs text-gray-400 font-medium">({items.length} รายการ)</span>
-          {closedCount > 0 && (
-            <span className="bg-red-100 text-red-700 text-xs font-bold px-2 py-0.5 rounded-full">
-              ปิด {closedCount}
-            </span>
+        {isPending ? '…' : isAvailable ? '✓' : '✕'}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * การ์ดเมนูอาหารแต่ละรายการ (Menu Item Card)
+ */
+function MenuItemCard({ item, isPending, onToggle }) {
+  const isAvailable = item.availability_status === 'available';
+  const isOutOfStock = item.availability_status === 'out_of_stock';
+  const isManualOff = item.availability_status === 'manual_off';
+
+  // รหัสเมนูสมมุติ หรือใช้ 3 ตัวแรก
+  const itemCode = item.code || `M${item.id.slice(0, 3).toUpperCase()}`;
+  const categoryName = item.categories?.name || 'เมนูบุฟเฟต์';
+  const emoji = PLACEHOLDER_IMAGES[item.kitchen_station] || '🍲';
+
+  return (
+    <div
+      className={cn(
+        'bg-white rounded-2xl border p-4 shadow-sm transition-all flex flex-col justify-between gap-3',
+        isAvailable
+          ? 'border-gray-200 hover:border-emerald-200'
+          : 'border-red-200 bg-red-50/20'
+      )}
+    >
+      <div className="flex gap-4 items-start">
+        {/* รูปอาหาร / รหัส */}
+        <div className="relative w-20 h-20 rounded-2xl bg-gray-100 flex items-center justify-center text-3xl flex-shrink-0 overflow-hidden border border-gray-200">
+          <span>{emoji}</span>
+
+          {/* ป้ายรหัสสินค้า */}
+          <span className="absolute top-1 left-1 bg-black/60 text-white text-[10px] font-mono font-bold px-1.5 py-0.2 rounded">
+            {itemCode}
+          </span>
+
+          {/* ป้ายทับเมื่อหมด */}
+          {(isOutOfStock || isManualOff) && (
+            <div className="absolute inset-0 bg-red-950/60 flex items-center justify-center">
+              <span className="text-[10px] font-black text-white bg-red-600 px-2 py-0.5 rounded-full shadow">
+                หมด
+              </span>
+            </div>
           )}
         </div>
-        {isOpen ? (
-          <ChevronUp size={18} className="text-gray-400" />
-        ) : (
-          <ChevronDown size={18} className="text-gray-400" />
-        )}
-      </button>
 
-      {/* รายการเมนู */}
-      {isOpen && (
-        <ul className="divide-y divide-gray-100">
-          {items.map((item) => {
-            const isManualOff = item.availability_status === 'manual_off';
-            const isOutOfStock = item.availability_status === 'out_of_stock';
-            const isPending = pendingIds.has(item.id);
-            const isDisabled = isOutOfStock || isPending;
+        {/* ข้อมูลเมนู */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <StatusBadge availability={item.availability_status} />
+          </div>
 
-            // out_of_stock = ระบบจัดการอัตโนมัติ — ห้าม Toggle ด้วยมือ
-            const toggleNext = isManualOff ? 'available' : 'manual_off';
+          <h3
+            className={cn(
+              'text-base font-bold leading-tight truncate',
+              isAvailable ? 'text-gray-900' : 'text-gray-500'
+            )}
+            title={item.name}
+          >
+            {item.name}
+          </h3>
 
-            return (
-              <li
-                key={item.id}
-                className={cn(
-                  'flex items-center gap-4 px-5 py-3.5 transition-colors',
-                  isManualOff && 'bg-red-50/40',
-                  isOutOfStock && 'bg-gray-50/60 opacity-60'
-                )}
-              >
-                {/* ชื่อเมนู */}
-                <div className="flex-1 min-w-0">
-                  <span className={cn(
-                    'text-base font-semibold block leading-snug',
-                    isManualOff ? 'text-red-600' : isOutOfStock ? 'text-gray-400' : 'text-gray-900'
-                  )}>
-                    {item.name}
-                  </span>
-                  {item.categories?.name && (
-                    <span className="text-xs text-gray-400 mt-0.5 block">{item.categories.name}</span>
-                  )}
-                </div>
+          <p className="text-xs text-gray-400 mt-0.5 truncate">
+            {categoryName}
+          </p>
 
-                {/* Badge สถานะ */}
-                <AvailabilityBadge availability={item.availability_status} />
+          {/* สถานะสต็อกโดยประมาณ */}
+          <div className="mt-2 text-xs">
+            {isAvailable ? (
+              <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-md inline-block">
+                📦 สต็อกพร้อมเสิร์ฟ
+              </span>
+            ) : isManualOff ? (
+              <span className="text-red-700 font-medium bg-red-50 px-2 py-0.5 rounded-md inline-block">
+                🚫 ปิดด้วยมือชั่วคราว
+              </span>
+            ) : (
+              <span className="text-gray-500 font-medium bg-gray-100 px-2 py-0.5 rounded-md inline-block">
+                ⚠️ วัตถุดิบหมด (ระบบตัดอัตโนมัติ)
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
 
-                {/* ปุ่มสวิตช์ Toggle สะอาดตาและแตะง่าย */}
-                <button
-                  onClick={() => !isDisabled && onToggle(item.id, toggleNext)}
-                  disabled={isDisabled}
-                  title={
-                    isOutOfStock
-                      ? 'สต็อกหมด — จัดการโดยระบบอัตโนมัติ'
-                      : isManualOff
-                      ? 'แตะเพื่อเปิดขาย'
-                      : 'แตะเพื่อปิดขายชั่วคราว'
-                  }
-                  className={cn(
-                    'w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all font-bold',
-                    isDisabled
-                      ? 'bg-gray-100 text-gray-300 cursor-not-allowed border border-gray-200'
-                      : isManualOff
-                      ? 'bg-red-500 text-white hover:bg-red-600 active:scale-95 shadow-sm'
-                      : 'bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95 shadow-sm'
-                  )}
-                >
-                  {isPending ? (
-                    <div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin" />
-                  ) : isOutOfStock ? (
-                    <Ban size={18} className="text-gray-400" />
-                  ) : isManualOff ? (
-                    <X size={20} strokeWidth={2.5} />
-                  ) : (
-                    <Check size={20} strokeWidth={2.5} />
-                  )}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {/* แถบด้านล่าง: สวิตช์เปิด/ปิด */}
+      <div className="flex items-center justify-between border-t border-gray-100 pt-3 mt-1">
+        <span className="text-xs text-gray-500 font-medium">
+          {isAvailable ? 'เปิดขายอยู่' : 'ระงับการสั่ง'}
+        </span>
+        <ToggleSwitch
+          isAvailable={isAvailable}
+          isOutOfStock={isOutOfStock}
+          isPending={isPending}
+          onToggle={() => onToggle(item)}
+        />
+      </div>
     </div>
   );
 }
 
 /**
- * หน้า Stock Override — จัดการเปิด/ปิดเมนูด้วยมือ
- * ดึงและอัปเดตตรงไปยัง Supabase Database 100%
+ * หน้าจัดการเปิด/ปิดเมนูอาหาร (Stock Override) — KURO SHABU
  */
 export default function StockOverridePage() {
   const [menuItems, setMenuItems] = useState([]);
-  const [loadError, setLoadError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+
+  // การค้นหาและตัวกรอง
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [onlyOutOfStock, setOnlyOutOfStock] = useState(false);
+
+  // ชุด ID ที่กำลังบันทึก (Optimistic UI)
   const [pendingIds, setPendingIds] = useState(new Set());
 
-  // ดึงข้อมูลเมนูจริงจาก Database
-  const loadMenuItems = useCallback(async (isManualRefresh = false) => {
-    if (isManualRefresh) setIsRefreshing(true);
-    try {
-      const { menuItems: items, error } = await getMenuItemsWithAvailability();
-      setMenuItems(items || []);
+  // นาฬิกา
+  const [clockString, setClockString] = useState('');
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date();
+      setClockString(
+        now.toLocaleTimeString('th-TH', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        })
+      );
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // โหลดข้อมูลเมนู
+  const loadMenuItems = useCallback(async (isManual = false) => {
+    if (isManual) setIsRefreshing(true);
+    setLoadError(null);
+
+    const { menuItems: fetchedItems, error } = await getMenuItemsWithAvailability();
+
+    if (error) {
       setLoadError(error);
-    } catch {
-      setLoadError('เกิดข้อผิดพลาดในการโหลดข้อมูลเมนู');
-    } finally {
-      setIsLoading(false);
-      if (isManualRefresh) setIsRefreshing(false);
+    } else {
+      setMenuItems(fetchedItems || []);
     }
+
+    setIsLoading(false);
+    if (isManual) setIsRefreshing(false);
   }, []);
 
   useEffect(() => {
-    let isMounted = true;
-    getMenuItemsWithAvailability().then(({ menuItems: items, error }) => {
-      if (!isMounted) return;
-      setMenuItems(items || []);
-      setLoadError(error);
+    let isCurrent = true;
+    getMenuItemsWithAvailability().then(({ menuItems: fetchedItems, error }) => {
+      if (!isCurrent) return;
+      if (error) {
+        setLoadError(error);
+      } else {
+        setMenuItems(fetchedItems || []);
+      }
       setIsLoading(false);
     });
     return () => {
-      isMounted = false;
+      isCurrent = false;
     };
   }, []);
 
-  // Toggle เมนู
-  const handleToggle = useCallback(async (menuItemId, newAvailability) => {
-    if (pendingIds.has(menuItemId)) return;
+  // ดักฟัง Realtime การเปลี่ยนแปลงเมนู
+  useKitchenRealtime({
+    onMenuChange: () => loadMenuItems(false),
+  });
 
-    setPendingIds((prev) => new Set([...prev, menuItemId]));
+  // Toggle เปิด/ปิดเมนู
+  const handleToggle = useCallback(
+    async (item) => {
+      if (item.availability_status === 'out_of_stock') return;
+      if (pendingIds.has(item.id)) return;
 
-    // Optimistic UI
-    setMenuItems((prev) =>
-      prev.map((item) =>
-        item.id === menuItemId ? { ...item, availability_status: newAvailability } : item
-      )
-    );
+      const nextStatus =
+        item.availability_status === 'manual_off' ? 'available' : 'manual_off';
 
-    const { error } = await toggleMenuAvailability(menuItemId, newAvailability);
+      // Optimistic UI
+      setPendingIds((prev) => new Set(prev).add(item.id));
+      setMenuItems((prev) =>
+        prev.map((i) =>
+          i.id === item.id ? { ...i, availability_status: nextStatus } : i
+        )
+      );
 
-    if (error) {
-      console.error('[StockOverridePage] Toggle Error:', error);
-      await loadMenuItems(false);
+      const { success, error } = await toggleMenuAvailability(item.id, nextStatus);
+
+      setPendingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item.id);
+        return next;
+      });
+
+      if (!success) {
+        // คืนค่าเดิมถ้า error
+        setMenuItems((prev) =>
+          prev.map((i) =>
+            i.id === item.id ? { ...i, availability_status: item.availability_status } : i
+          )
+        );
+        alert(error || 'ไม่สามารถอัปเดตสถานะเมนูได้');
+      }
+    },
+    [pendingIds]
+  );
+
+  // ─── คำนวณสรุปสถิติตัวเลข ──────────────────────────────────────
+  const stats = useMemo(() => {
+    const total = menuItems.length;
+    const ready = menuItems.filter((i) => i.availability_status === 'available').length;
+    const outOfStock = menuItems.filter(
+      (i) => i.availability_status === 'out_of_stock' || i.availability_status === 'manual_off'
+    ).length;
+
+    return { total, ready, outOfStock };
+  }, [menuItems]);
+
+  // หมวดหมู่ทั้งหมดสำหรับทำแถบ Filter Pills
+  const categories = useMemo(() => {
+    const map = new Map();
+    for (const item of menuItems) {
+      const cat = item.categories?.name || 'อื่นๆ';
+      map.set(cat, (map.get(cat) || 0) + 1);
     }
+    return Array.from(map.entries());
+  }, [menuItems]);
 
-    setPendingIds((prev) => {
-      const next = new Set(prev);
-      next.delete(menuItemId);
-      return next;
+  // กรองรายการเมนูตาม Search, Category, OutOfStock
+  const filteredItems = useMemo(() => {
+    return menuItems.filter((item) => {
+      // ค้นหาตามชื่อ
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const nameMatch = item.name?.toLowerCase().includes(query);
+        if (!nameMatch) return false;
+      }
+
+      // กรองหมวดหมู่
+      if (selectedCategory !== 'all') {
+        const itemCat = item.categories?.name || 'อื่นๆ';
+        if (itemCat !== selectedCategory) return false;
+      }
+
+      // กรองเฉพาะที่หมด
+      if (onlyOutOfStock) {
+        if (item.availability_status === 'available') return false;
+      }
+
+      return true;
     });
-  }, [pendingIds, loadMenuItems]);
-
-  // จัดกลุ่มตามสถานี
-  const itemsByStation = menuItems.reduce((acc, item) => {
-    const station = item.kitchen_station || 'other';
-    if (!acc[station]) acc[station] = [];
-    acc[station].push(item);
-    return acc;
-  }, {});
-
-  const stationOrder = ['fresh', 'beverage', 'grill', 'hot_kitchen'];
-  const sortedStations = [
-    ...stationOrder.filter((s) => itemsByStation[s]),
-    ...Object.keys(itemsByStation).filter((s) => !stationOrder.includes(s)),
-  ];
-
-  const totalClosedCount = menuItems.filter(
-    (i) => i.availability_status === 'manual_off' || i.availability_status === 'out_of_stock'
-  ).length;
+  }, [menuItems, searchQuery, selectedCategory, onlyOutOfStock]);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* ── Clean Header ── */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <span>🔧</span> จัดการเปิด/ปิดเมนู
-              </h1>
+    <div className="min-h-screen bg-[#F8F9FA] pb-24 flex flex-col font-sans">
+      {/* ═══ 1. แถบหัวเว็บ KURO SHABU (Crimson Bar) ═══ */}
+      <header className="bg-[#7F1D1D] text-white shadow-md sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xl shadow-inner">
+              🍲
             </div>
-            {totalClosedCount > 0 ? (
-              <p className="text-xs text-red-600 font-semibold mt-0.5">
-                ปิดขายอยู่ {totalClosedCount} รายการ
-              </p>
-            ) : (
-              <p className="text-xs text-emerald-600 font-medium mt-0.5">
-                ทุกเมนูเปิดขายปกติ
-              </p>
-            )}
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-black text-base tracking-wide">
+                  คุโระ ชาบู (KURO SHABU)
+                </span>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-full font-bold">
+                  ● ออนไลน์
+                </span>
+              </div>
+              <p className="text-xs text-red-200">สาขาสยามสแควร์วัน ชั้น 4</p>
+            </div>
           </div>
 
-          <button
-            onClick={() => loadMenuItems(true)}
-            disabled={isLoading || isRefreshing}
-            className="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-40"
-            title="รีเฟรชข้อมูลจากฐานข้อมูล"
-          >
-            <RefreshCw size={16} className={cn(isRefreshing && 'animate-spin')} />
-          </button>
-        </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-xl border border-white/10">
+              <Clock size={16} className="text-red-300" />
+              <span className="font-mono font-bold text-sm text-white tracking-wider">
+                {clockString || '00:00:00'}
+              </span>
+            </div>
 
-        {/* Legend อธิบายสัญลักษณ์ */}
-        <div className="max-w-3xl mx-auto px-4 py-2 border-t border-gray-100 flex items-center gap-4 text-xs text-gray-500">
-          <span className="flex items-center gap-1.5 font-medium text-emerald-700">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> เปิดขาย
-          </span>
-          <span className="flex items-center gap-1.5 font-medium text-red-600">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" /> ปิดชั่วคราว
-          </span>
-          <span className="flex items-center gap-1.5 text-gray-400">
-            <span className="w-2.5 h-2.5 rounded-full bg-gray-300 inline-block" /> สต็อกหมด (ออโต้)
-          </span>
+            <button
+              onClick={() => loadMenuItems(true)}
+              disabled={isLoading || isRefreshing}
+              className="p-2 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/20 transition-colors disabled:opacity-40"
+              title="รีเฟรชข้อมูล"
+            >
+              <RefreshCw
+                size={18}
+                className={cn(isRefreshing && 'animate-spin')}
+              />
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* ── Main Content ── */}
-      <main className="flex-1 max-w-3xl w-full mx-auto p-4 space-y-4">
-        {/* Loading */}
+      {/* ═══ 2. แบนเนอร์หัวเรื่องการจัดการเมนู ═══ */}
+      <section className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center text-2xl flex-shrink-0">
+              🚫
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-black text-gray-900">
+                  จัดการเมนูอาหารหมด ({stats.total} Items Management)
+                </h1>
+                <span className="text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-bold">
+                  ● ซิงค์ระบบลูกค้า: อัตโนมัติ (Online)
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1 max-w-2xl leading-relaxed">
+                ระบบตัดสต็อกและระงับการสั่งอัตโนมัติแบบเรียลไทม์; เมื่อเปลี่ยนสถานะเป็น &quot;หมด (Out of Stock)&quot; เมนูจะถูกระงับและซ่อนจากแท็บเล็ตและ QR Mobile ทันที
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ═══ 3. แถบสรุปสถิติตัวเลข (Stats Row) ═══ */}
+      <section className="max-w-7xl mx-auto px-4 pt-4 w-full">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {/* ทั้งหมด */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+            <span className="text-xs text-gray-500 font-medium block">
+              เมนูทั้งหมดในระบบ
+            </span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-3xl font-black text-gray-900">
+                {stats.total}
+              </span>
+              <span className="text-xs text-gray-400">รายการ</span>
+            </div>
+          </div>
+
+          {/* พร้อมเสิร์ฟ */}
+          <div className="bg-white border border-emerald-200 bg-emerald-50/20 rounded-2xl p-4 shadow-sm">
+            <span className="text-xs text-emerald-700 font-bold block">
+              พร้อมเสิร์ฟปกติ
+            </span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-3xl font-black text-emerald-600">
+                {stats.ready}
+              </span>
+              <span className="text-xs text-emerald-500">รายการ</span>
+            </div>
+          </div>
+
+          {/* สินค้าหมด */}
+          <div
+            className={cn(
+              'border rounded-2xl p-4 shadow-sm transition-all',
+              stats.outOfStock > 0
+                ? 'bg-red-50 border-red-300'
+                : 'bg-white border-gray-200'
+            )}
+          >
+            <span
+              className={cn(
+                'text-xs font-bold block',
+                stats.outOfStock > 0 ? 'text-red-700' : 'text-gray-500'
+              )}
+            >
+              สินค้าหมด / ปิดขาย
+            </span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span
+                className={cn(
+                  'text-3xl font-black',
+                  stats.outOfStock > 0 ? 'text-red-600' : 'text-gray-400'
+                )}
+              >
+                {stats.outOfStock}
+              </span>
+              <span
+                className={cn(
+                  'text-xs',
+                  stats.outOfStock > 0 ? 'text-red-500 font-semibold' : 'text-gray-400'
+                )}
+              >
+                รายการ
+              </span>
+            </div>
+          </div>
+
+          {/* สต็อกวิกฤต */}
+          <div className="bg-white border border-orange-200 rounded-2xl p-4 shadow-sm">
+            <span className="text-xs text-orange-700 font-medium block">
+              สต็อกวิกฤต (ใกล้แตะพิกัด)
+            </span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-3xl font-black text-orange-600">0</span>
+              <span className="text-xs text-orange-400">รายการ</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ═══ 4. ช่องค้นหา & แถบกรองหมวดหมู่ (Search & Filters) ═══ */}
+      <section className="max-w-7xl mx-auto px-4 pt-4 w-full space-y-3">
+        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+          {/* ช่องค้นหา */}
+          <div className="relative flex-1 max-w-md">
+            <Search
+              size={18}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+            />
+            <input
+              type="text"
+              placeholder="ค้นหาชื่อเมนู, รหัสอาหาร เช่น วากิว, ลิ้นวัว..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#7F1D1D] focus:border-[#7F1D1D] shadow-sm"
+            />
+          </div>
+
+          {/* ปุ่มตัวกรองเฉพาะสินค้าหมด */}
+          <button
+            onClick={() => setOnlyOutOfStock((prev) => !prev)}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all border shadow-sm',
+              onlyOutOfStock
+                ? 'bg-red-600 border-red-600 text-white'
+                : 'bg-white border-gray-200 text-gray-700 hover:border-red-300'
+            )}
+          >
+            <AlertTriangle size={15} />
+            <span>แสดงเฉพาะรายการที่หมด ({stats.outOfStock})</span>
+          </button>
+        </div>
+
+        {/* แถบ Category Pills */}
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+          <button
+            onClick={() => setSelectedCategory('all')}
+            className={cn(
+              'flex-shrink-0 px-4 py-2 rounded-xl text-xs font-bold transition-all border',
+              selectedCategory === 'all'
+                ? 'bg-[#7F1D1D] border-[#7F1D1D] text-white shadow-sm'
+                : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+            )}
+          >
+            ทั้งหมด ({stats.total})
+          </button>
+          {categories.map(([catName, count]) => (
+            <button
+              key={catName}
+              onClick={() => setSelectedCategory(catName)}
+              className={cn(
+                'flex-shrink-0 px-4 py-2 rounded-xl text-xs font-bold transition-all border',
+                selectedCategory === catName
+                  ? 'bg-[#7F1D1D] border-[#7F1D1D] text-white shadow-sm'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+              )}
+            >
+              {catName} ({count})
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* ═══ 5. รายการเมนูแบบ Grid (Menu Grid) ═══ */}
+      <main className="max-w-7xl w-full mx-auto p-4 flex-1">
+        {/* กำลังโหลด */}
         {isLoading && (
           <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-            <div className="w-8 h-8 border-2 border-gray-300 border-t-orange-500 rounded-full animate-spin mb-3" />
-            <p className="text-sm">กำลังโหลดข้อมูลเมนู...</p>
+            <div className="w-10 h-10 border-4 border-gray-200 border-t-[#7F1D1D] rounded-full animate-spin mb-3" />
+            <p className="text-sm font-semibold text-gray-600">
+              กำลังโหลดข้อมูลเมนู...
+            </p>
           </div>
         )}
 
-        {/* Error */}
+        {/* ข้อผิดพลาด */}
         {!isLoading && loadError && (
           <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center max-w-md mx-auto my-10">
-            <span className="text-3xl block mb-2">⚠️</span>
-            <p className="text-sm font-semibold text-red-700 mb-4">{loadError}</p>
+            <p className="text-sm font-bold text-red-700 mb-4">{loadError}</p>
             <button
               onClick={() => loadMenuItems(true)}
-              className="px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-semibold hover:bg-red-700"
+              className="px-4 py-2 bg-[#7F1D1D] text-white rounded-xl text-xs font-bold hover:bg-red-800"
             >
               ลองใหม่
             </button>
           </div>
         )}
 
-        {/* ไม่มีเมนูใน Database */}
-        {!isLoading && !loadError && menuItems.length === 0 && (
-          <div className="border-2 border-dashed border-gray-200 rounded-2xl p-12 text-center bg-white my-8">
+        {/* ผลการค้นหาว่างเปล่า */}
+        {!isLoading && !loadError && filteredItems.length === 0 && (
+          <div className="border-2 border-dashed border-gray-200 rounded-3xl p-16 text-center bg-white my-8">
             <span className="text-4xl block mb-2">📋</span>
-            <p className="text-sm font-medium text-gray-600">ไม่พบรายการเมนูในฐานข้อมูล</p>
-            <p className="text-xs text-gray-400 mt-1">กรุณาเพิ่มเมนูในตาราง menu_items</p>
+            <p className="text-sm font-bold text-gray-700">
+              ไม่พบรายการเมนูที่ตรงกับเงื่อนไข
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              ลองเปลี่ยนคำค้นหา หรือรีเซ็ตตัวกรอง
+            </p>
           </div>
         )}
 
-        {/* รายการเมนูแยกตามสถานี */}
-        {!isLoading && !loadError && sortedStations.map((station) => (
-          <StationSection
-            key={station}
-            stationKey={station}
-            items={itemsByStation[station]}
-            onToggle={handleToggle}
-            pendingIds={pendingIds}
-          />
-        ))}
+        {/* Grid เมนู 2 คอลัมน์บนจอใหญ่ */}
+        {!isLoading && !loadError && filteredItems.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredItems.map((item) => (
+              <MenuItemCard
+                key={item.id}
+                item={item}
+                isPending={pendingIds.has(item.id)}
+                onToggle={handleToggle}
+              />
+            ))}
+          </div>
+        )}
       </main>
     </div>
   );

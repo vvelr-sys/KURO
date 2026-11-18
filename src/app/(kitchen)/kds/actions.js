@@ -92,11 +92,11 @@ export async function getKitchenOrders(selectedStation = null) {
         };
       }
 
-      // ใส่รายการอาหารลงในบิลของโต๊ะนั้น
+      // ใส่รายการอาหารเข้าไปในการ์ดโต๊ะนั้น
       ordersGrouped[orderId].items.push({
         id: item.id,
         menu_item_id: item.menu_item_id,
-        menu_item_name: item.menu_items?.name || 'ไม่มีชื่อเมนู',
+        menu_item_name: item.menu_items?.name || 'ไม่ทราบชื่อเมนู',
         quantity: item.quantity,
         status: item.status,
         cancel_reason: item.cancelled_reason,
@@ -105,22 +105,82 @@ export async function getKitchenOrders(selectedStation = null) {
       });
     }
 
-    // แปลงข้อมูลจาก Object ให้เป็น Array เพื่อส่งให้หน้าจอใช้งาน
-    return {
-      orders: Object.values(ordersGrouped),
-      error: null,
-    };
+    // กรองเอาเฉพาะบิลที่ยังมีรายการค้างอยู่ (ยังไม่เสร็จทั้งหมด)
+    const activeOrders = Object.values(ordersGrouped).filter((order) => {
+      return order.items.some((item) => item.status === 'pending' || item.status === 'cooking');
+    });
+
+    return { orders: activeOrders, error: null };
   } catch (err) {
-    console.error('เกิดข้อผิดพลาดไม่คาดคิด:', err.message);
-    return {
-      orders: [],
-      error: 'เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล',
-    };
+    console.error('เกิดข้อผิดพลาด:', err.message);
+    return { orders: [], error: err.message };
   }
 }
 
 /**
- * เปลี่ยนสถานะของอาหารแต่ละจาน (กดทำเสร็จ หรือ กดย้อนกลับ)
+ * ดึงรายการออเดอร์ที่เพิ่งเสิร์ฟล่าสุด (Recall Panel)
+ * @param {number} limit
+ */
+export async function getRecentlyServedOrders(limit = 6) {
+  try {
+    const supabase = await createClient();
+
+    const { data, error } = await supabase
+      .from('order_items')
+      .select(`
+        id,
+        order_id,
+        quantity,
+        status,
+        created_at,
+        menu_items!inner (
+          name
+        ),
+        orders!inner (
+          id,
+          sessions!inner (
+            session_tables (
+              is_active,
+              dining_tables (
+                table_number
+              )
+            )
+          )
+        )
+      `)
+      .eq('status', 'served')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      return { items: [], error: error.message };
+    }
+
+    const formatted = (data || []).map((item) => {
+      const sessionTables = item.orders?.sessions?.session_tables || [];
+      const tables = sessionTables
+        .filter((st) => st.is_active && st.dining_tables?.table_number)
+        .map((st) => st.dining_tables.table_number);
+      const tableLabel = tables.length > 0 ? tables.join(' + ') : 'ไม่ระบุ';
+
+      return {
+        id: item.id,
+        order_id: item.order_id,
+        table_number: tableLabel,
+        menu_name: item.menu_items?.name || 'เมนู',
+        quantity: item.quantity,
+        created_at: item.created_at,
+      };
+    });
+
+    return { items: formatted, error: null };
+  } catch (err) {
+    return { items: [], error: err.message };
+  }
+}
+
+/**
+ * อัปเดตสถานะของอาหารแต่ละจาน
  * 
  * @param {string} itemId - รหัสรายการอาหาร
  * @param {string} newStatus - สถานะใหม่ ('pending', 'cooking', 'served', 'cancelled')
@@ -158,11 +218,33 @@ export async function updateOrderItemStatus(itemId, newStatus, cancelReason) {
       return { success: false, error: error.message };
     }
 
-    // แจ้ง Next.js ให้รีเฟรชข้อมูลหน้า KDS
     revalidatePath('/(kitchen)/kds');
     return { success: true, error: null };
   } catch (err) {
     console.error('เกิดข้อผิดพลาด:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * เรียกคืนรายการที่เสิร์ฟไปแล้วกลับมาเป็น cooking / pending
+ */
+export async function recallOrderItem(itemId) {
+  try {
+    const supabase = await createClient();
+
+    const { error } = await supabase
+      .from('order_items')
+      .update({ status: 'cooking' })
+      .eq('id', itemId);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath('/(kitchen)/kds');
+    return { success: true, error: null };
+  } catch (err) {
     return { success: false, error: err.message };
   }
 }
