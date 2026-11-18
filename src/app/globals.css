@@ -25,3 +25,38 @@ body {
   background: var(--color-surface);
   color: var(--color-ink);
 }
+
+/*
+ * การพิมพ์ (window.print): พิมพ์เฉพาะ <PrintPortal> (div.print-root ใต้ body) เช่น ตั๋ว QR โต๊ะ
+ * ส่วนอื่นของหน้าถูกซ่อนทั้งหมด / บนหน้าจอปกติ print-root มองไม่เห็น
+ */
+@media screen {
+  .print-root {
+    display: none;
+  }
+}
+
+@media print {
+  @page {
+    margin: 6mm;
+  }
+  body > *:not(.print-root) {
+    display: none !important;
+  }
+  .print-root {
+    display: block;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/*
+ * กระดาษกว้าง (A4 / Letter) → ขยายตั๋วให้เต็มกระดาษขึ้น
+ * กระดาษสลิป 80 มม. ไม่เข้าเงื่อนไขนี้ → ใช้ขนาดปกติ (ออกแบบมาพอดีสลิปอยู่แล้ว)
+ * ตอนพิมพ์ "min-width" = ความกว้างของพื้นที่พิมพ์บนกระดาษ
+ */
+@media print and (min-width: 120mm) {
+  .print-root {
+    zoom: 1.7;
+  }
+}

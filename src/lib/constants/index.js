@@ -86,6 +86,28 @@ export const ROUTE_PERMISSIONS = {
 };
 
 /**
+ * ขนาดโต๊ะ 3 แบบ (ตรงกับ queues.table_size และตัวอักษรนำหน้าเลขคิว A/B/C)
+ * ใช้จัดกลุ่มผังโต๊ะจาก dining_tables.capacity และเลือกขนาดโต๊ะตอนออกบัตรคิว
+ */
+export const TABLE_SIZES = [
+  { key: 'small', label: 'โต๊ะเล็ก', seatLabel: '1-2 ที่นั่ง', queuePrefix: 'A', minSeats: 1, maxSeats: 2 },
+  { key: 'medium', label: 'โต๊ะกลาง', seatLabel: '3-4 ที่นั่ง', queuePrefix: 'B', minSeats: 3, maxSeats: 4 },
+  { key: 'large', label: 'โต๊ะใหญ่', seatLabel: '5 ที่นั่งขึ้นไป', queuePrefix: 'C', minSeats: 5, maxSeats: Infinity },
+];
+
+/**
+ * หาขนาดโต๊ะจากจำนวนที่นั่ง (หรือจำนวนลูกค้า)
+ * @param {number} seatCount
+ * @returns {'small'|'medium'|'large'}
+ */
+export function getTableSizeKey(seatCount) {
+  return (TABLE_SIZES.find((size) => seatCount <= size.maxSeats) ?? TABLE_SIZES[TABLE_SIZES.length - 1]).key;
+}
+
+/** เหลือเวลาไม่เกินกี่นาทีถึงขึ้นสีเตือน "ใกล้หมดเวลา" บนผังโต๊ะ */
+export const NEAR_EXPIRY_MINUTES = 10;
+
+/**
  * หน้าแรกหลังล็อกอินของแต่ละตำแหน่ง (ใช้ตอนล็อกอินสำเร็จ และตอนเข้าหน้าที่ไม่มีสิทธิ์)
  */
 export const ROLE_HOME_PATH = {

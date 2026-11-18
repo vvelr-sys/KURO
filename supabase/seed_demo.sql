@@ -8,7 +8,7 @@
 -- ############################################################
 --
 -- KURO POS — Seed ข้อมูลจำลองการใช้งาน (Demo Data) v1.8
--- ลำดับการรัน: migrations/002 → 003 → 004 → สร้างบัญชี (seed_profiles.sql หรือ scripts/seed-users.mjs) → seed_master.sql → seed_demo.sql (ไฟล์นี้)
+-- ลำดับการรัน: migrations/002 → 003 → 004 → 005 → สร้างบัญชี (seed_profiles.sql หรือ scripts/seed-users.mjs) → seed_master.sql → seed_demo.sql (ไฟล์นี้)
 -- รีเซ็ตข้อมูลเมื่อทดสอบจนเละ: รันไฟล์นี้ซ้ำได้ทันที (ทั้งไฟล์อยู่ใน Transaction เดียว
 --   ถ้าผิดพลาดตรงไหนจะ ROLLBACK ทั้งหมด ข้อมูลเดิมไม่เสีย)
 --

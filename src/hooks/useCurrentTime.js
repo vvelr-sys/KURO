@@ -53,3 +53,18 @@ export function useCurrentTime() {
   const time = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   return time || null;
 }
+
+/**
+ * ใช้ตัวจับเวลากลางแต่ "render ใหม่เฉพาะเมื่อผลลัพธ์เปลี่ยน"
+ * เช่น การ์ดโต๊ะอยากรู้แค่ว่า "ใกล้หมดเวลาหรือยัง" → render ใหม่ครั้งเดียวตอนสถานะเปลี่ยน ไม่ใช่ทุกวินาที
+ * @template T
+ * @param {(now: number|null) => T} select - ฟังก์ชันแปลงเวลาเป็นค่าที่ต้องการ (ต้องคืนค่า primitive เช่น string/number)
+ * @returns {T}
+ */
+export function useCurrentTimeSelector(select) {
+  return useSyncExternalStore(
+    subscribe,
+    () => select(currentTime || null),
+    () => select(null)
+  );
+}

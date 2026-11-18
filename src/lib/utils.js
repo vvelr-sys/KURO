@@ -49,3 +49,33 @@ export function formatCurrency(amount) {
     minimumFractionDigits: 2,
   }).format(amount || 0);
 }
+
+/**
+ * แปลงระยะเวลา (milliseconds) เป็นข้อความนาฬิกา เช่น 05:09 หรือ 1:02:30 (ค่าติดลบนับเป็น 0)
+ * @param {number} durationMs
+ * @returns {string}
+ */
+export function formatDuration(durationMs) {
+  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (value) => String(value).padStart(2, '0');
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
+}
+
+const clockTimeFormatter = new Intl.DateTimeFormat('th-TH', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'Asia/Bangkok',
+});
+
+/**
+ * แสดงเวลาแบบ 18:30 น. (เวลาไทย)
+ * @param {string|number|Date} value
+ * @returns {string}
+ */
+export function formatClockTime(value) {
+  return `${clockTimeFormatter.format(new Date(value))} น.`;
+}
