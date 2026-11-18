@@ -868,6 +868,21 @@ ALTER PUBLICATION supabase_realtime ADD TABLE menu_items;
 ALTER PUBLICATION supabase_realtime ADD TABLE queues;
 ALTER PUBLICATION supabase_realtime ADD TABLE service_requests;
 
+-- ============================================================  
+-- SECTION 7: TABLE PERMISSIONS (GRANT TO ANON & AUTHENTICATED)
+-- ปลดล็อกสิทธิ์พื้นฐานให้กับ anon และ authenticated ทุกตาราง
+-- ============================================================
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
+
 -- ============================================================
 -- END OF MIGRATION SCRIPT v1.8
 -- ============================================================
+    
