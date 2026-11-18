@@ -192,6 +192,51 @@ function MenuItemCard({ item, isPending, onToggle }) {
 }
 
 /**
+ * หน้าต่างกรอกเหตุผลก่อนปิดเมนู (บังคับตาม audit_matrix: MANUAL_OFF_MENU)
+ */
+function TurnOffReasonModal({ menuName, onConfirm, onClose }) {
+  const [reasonText, setReasonText] = useState('');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+      <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-6 w-full max-w-sm">
+        <h3 className="text-base font-bold text-gray-900 mb-1">ปิดขายเมนู</h3>
+        <p className="text-sm text-gray-600 mb-4">
+          เมนู: <span className="font-semibold text-gray-900">{menuName}</span>
+        </p>
+
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+          เหตุผลในการปิดเมนู <span className="text-red-500">*</span>
+        </label>
+        <textarea
+          className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm text-gray-900 resize-none focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-red-400 h-24"
+          placeholder="เช่น วัตถุดิบหมดจริง, ของไม่สด..."
+          value={reasonText}
+          onChange={(e) => setReasonText(e.target.value)}
+          autoFocus
+        />
+
+        <div className="flex gap-2 mt-4">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            ยกเลิก
+          </button>
+          <button
+            onClick={() => onConfirm(reasonText.trim())}
+            disabled={!reasonText.trim()}
+            className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            ยืนยันปิดเมนู
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * หน้าจัดการเปิด/ปิดเมนูอาหาร (Stock Override) — KURO SHABU
  */
 export default function StockOverridePage() {
@@ -207,6 +252,9 @@ export default function StockOverridePage() {
 
   // ชุด ID ที่กำลังบันทึก (Optimistic UI)
   const [pendingIds, setPendingIds] = useState(new Set());
+
+  // เมนูที่กำลังจะปิด (แสดง Modal กรอกเหตุผล)
+  const [itemToTurnOff, setItemToTurnOff] = useState(null);
 
   // นาฬิกา
   const [clockString, setClockString] = useState('');
@@ -263,16 +311,9 @@ export default function StockOverridePage() {
     onMenuChange: () => loadMenuItems(false),
   });
 
-  // Toggle เปิด/ปิดเมนู
-  const handleToggle = useCallback(
-    async (item) => {
-      if (item.availability_status === 'out_of_stock') return;
-      if (pendingIds.has(item.id)) return;
-
-      const nextStatus =
-        item.availability_status === 'manual_off' ? 'available' : 'manual_off';
-
-      // Optimistic UI
+  // บันทึกสถานะใหม่ลง DB (Optimistic UI)
+  const applyAvailability = useCallback(
+    async (item, nextStatus, reason = null) => {
       setPendingIds((prev) => new Set(prev).add(item.id));
       setMenuItems((prev) =>
         prev.map((i) =>
@@ -280,7 +321,7 @@ export default function StockOverridePage() {
         )
       );
 
-      const { success, error } = await toggleMenuAvailability(item.id, nextStatus);
+      const { success, error } = await toggleMenuAvailability(item.id, nextStatus, reason);
 
       setPendingIds((prev) => {
         const next = new Set(prev);
@@ -298,7 +339,32 @@ export default function StockOverridePage() {
         alert(error || 'ไม่สามารถอัปเดตสถานะเมนูได้');
       }
     },
-    [pendingIds]
+    []
+  );
+
+  // Toggle เปิด/ปิดเมนู — ปิดเมนูต้องกรอกเหตุผลก่อน (MANUAL_OFF_MENU)
+  const handleToggle = useCallback(
+    (item) => {
+      if (item.availability_status === 'out_of_stock') return;
+      if (pendingIds.has(item.id)) return;
+
+      if (item.availability_status === 'manual_off') {
+        applyAvailability(item, 'available');
+      } else {
+        setItemToTurnOff(item);
+      }
+    },
+    [pendingIds, applyAvailability]
+  );
+
+  const handleConfirmTurnOff = useCallback(
+    async (reason) => {
+      if (!itemToTurnOff) return;
+      const item = itemToTurnOff;
+      setItemToTurnOff(null);
+      await applyAvailability(item, 'manual_off', reason);
+    },
+    [itemToTurnOff, applyAvailability]
   );
 
   // ─── คำนวณสรุปสถิติตัวเลข ──────────────────────────────────────
@@ -349,6 +415,15 @@ export default function StockOverridePage() {
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] pb-24 flex flex-col font-sans">
+      {/* Modal กรอกเหตุผลปิดเมนู */}
+      {itemToTurnOff && (
+        <TurnOffReasonModal
+          menuName={itemToTurnOff.name}
+          onConfirm={handleConfirmTurnOff}
+          onClose={() => setItemToTurnOff(null)}
+        />
+      )}
+
       {/* ═══ 1. แถบหัวเว็บ KURO SHABU (Crimson Bar) ═══ */}
       <header className="bg-[#7F1D1D] text-white shadow-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between gap-4">
@@ -365,7 +440,7 @@ export default function StockOverridePage() {
                   ● ออนไลน์
                 </span>
               </div>
-              <p className="text-xs text-red-200">สาขาสยามสแควร์วัน ชั้น 4</p>
+              <p className="text-xs text-red-200">ครัว — เปิด/ปิดเมนู</p>
             </div>
           </div>
 
@@ -409,7 +484,7 @@ export default function StockOverridePage() {
                 </span>
               </div>
               <p className="text-xs text-gray-500 mt-1 max-w-2xl leading-relaxed">
-                ระบบตัดสต็อกและระงับการสั่งอัตโนมัติแบบเรียลไทม์; เมื่อเปลี่ยนสถานะเป็น &quot;หมด (Out of Stock)&quot; เมนูจะถูกระงับและซ่อนจากแท็บเล็ตและ QR Mobile ทันที
+                ระบบตัดสต็อกและระงับการสั่งอัตโนมัติแบบเรียลไทม์; เมื่อปิดเมนู หน้าสั่งอาหารของลูกค้าจะแสดงสถานะ &quot;หมด&quot; และกดสั่งไม่ได้ทันที
               </p>
             </div>
           </div>
@@ -418,7 +493,7 @@ export default function StockOverridePage() {
 
       {/* ═══ 3. แถบสรุปสถิติตัวเลข (Stats Row) ═══ */}
       <section className="max-w-7xl mx-auto px-4 pt-4 w-full">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           {/* ทั้งหมด */}
           <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
             <span className="text-xs text-gray-500 font-medium block">
@@ -479,17 +554,6 @@ export default function StockOverridePage() {
               >
                 รายการ
               </span>
-            </div>
-          </div>
-
-          {/* สต็อกวิกฤต */}
-          <div className="bg-white border border-orange-200 rounded-2xl p-4 shadow-sm">
-            <span className="text-xs text-orange-700 font-medium block">
-              สต็อกวิกฤต (ใกล้แตะพิกัด)
-            </span>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-3xl font-black text-orange-600">0</span>
-              <span className="text-xs text-orange-400">รายการ</span>
             </div>
           </div>
         </div>

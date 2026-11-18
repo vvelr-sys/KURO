@@ -2,11 +2,10 @@
 
 import { useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { useAudioAlert } from './useAudioAlert';
 
 /**
  * Hook สำหรับเชื่อมต่อ Supabase Realtime เพื่อรับสัญญาณอัปเดตสดในครัว
- * 1. ถ้ามีลูกค้าสั่งอาหารใหม่เข้ามา ➔ เล่นเสียงแจ้งเตือน Beep-Beep และโหลดรายการใหม่
+ * 1. ถ้ามีลูกค้าสั่งอาหารใหม่เข้ามา ➔ เรียก onNewOrder (หน้าจอเป็นผู้เล่นเสียงเอง)
  * 2. ถ้าสถานะอาหารเปลี่ยน ➔ อัปเดตหน้าจอทันที
  * 3. ถ้าเมนูถูกเปิดหรือปิดขาย ➔ อัปเดตหน้าจอทันที
  *
@@ -18,7 +17,6 @@ import { useAudioAlert } from './useAudioAlert';
  */
 export function useKitchenRealtime({ station, onNewOrder, onOrderChange, onMenuChange }) {
   const supabase = createClient();
-  const { playAlert } = useAudioAlert();
 
   // เก็บตัวแปรไว้ไม่ให้ฟังก์ชันรีเซ็ตค่าระหว่างทำงาน
   const channelRef = useRef(null);
@@ -51,14 +49,12 @@ export function useKitchenRealtime({ station, onNewOrder, onOrderChange, onMenuC
 
           // กรณีที่ 1: ลูกค้าสั่งอาหารใหม่เข้ามา (INSERT)
           if (eventType === 'INSERT') {
-            playAlert(); // เล่นเสียงเตือน
             onNewOrderRef.current?.();
           } 
           // กรณีที่ 2: มีการเปลี่ยนสถานะอาหาร (UPDATE)
           else if (eventType === 'UPDATE') {
             // ถ้าเปลี่ยนมาเป็น 'pending' (รอทำ) ให้ถือว่าเป็นออเดอร์ที่ต้องส่งเสียงเตือน
             if (newRecord.status === 'pending' && oldRecord?.status !== 'pending') {
-              playAlert();
               onNewOrderRef.current?.();
             } else {
               onOrderChangeRef.current?.();
