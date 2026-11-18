@@ -17,6 +17,7 @@
 | [`supabase/migrations/003_queue_guests_tax_invoice.sql`](../supabase/migrations/003_queue_guests_tax_invoice.sql) | คิวแยกผู้ใหญ่/เด็ก (`adult_count`, `child_count`), เลขที่ใบกำกับภาษีอัตโนมัติ (`invoice_number`), อีเมลผู้รับใบกำกับภาษี | ✅ รันซ้ำได้ แถวคิวเดิมถือเป็นผู้ใหญ่ทั้งหมด |
 | [`supabase/migrations/004_protect_profiles.sql`](../supabase/migrations/004_protect_profiles.sql) | ปิดช่องโหว่ `profiles`: อ่านได้เฉพาะพนักงานที่ล็อกอิน และไม่มีใครอ่าน `pin_hash` ผ่าน API ได้ | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
 | [`supabase/migrations/005_table_session_functions.sql`](../supabase/migrations/005_table_session_functions.sql) | ฟังก์ชันหน้าผังโต๊ะ (เปิด/ย้าย/เก็บ/ปิดใช้งานโต๊ะ, เชิญออก, ชั่งเนื้อ, พิมพ์ QR) + policy ให้สร้าง QR token และบันทึก audit_logs ได้ | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
+| [`supabase/migrations/006_queue_functions.sql`](../supabase/migrations/006_queue_functions.sql) | ฟังก์ชันคิว: ออกบัตรคิว (เลขคิว A/B/C + 3 หลัก เริ่ม 001 ทุกวัน กันเลขซ้ำ), เรียก/เรียกซ้ำ/ข้าม/ยกเลิก | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
 | [`supabase/seed_master.sql`](../supabase/seed_master.sql) | ข้อมูลหลัก: ตั้งค่า VAT/ค่าปรับ, แพ็กเกจ, โต๊ะ T01-T08, หมวด, วัตถุดิบ, เมนู, ตัวเลือก, BOM, อัตราใช้ต่อหัว | ✅ รันซ้ำ = รีเซ็ตข้อมูลหลักกลับค่าตั้งต้น (ยกเว้นสถานะโต๊ะ) |
 | [`supabase/seed_demo.sql`](../supabase/seed_demo.sql) | ล้างข้อมูลการใช้งาน แล้วใส่ข้อมูลจำลอง (คิว, 3 โต๊ะกำลังใช้งาน, ออเดอร์, บิล, ประวัติ 7 วัน ฯลฯ) | ✅ ทั้งไฟล์อยู่ใน Transaction เดียว ผิดพลาดตรงไหน ROLLBACK ทั้งหมด |
 
@@ -26,7 +27,7 @@
 
 | ลำดับ | ทำอะไร | ที่ไหน |
 |:---:|---|---|
-| 0 | `supabase/migrations/002_v18_fixes.sql` → `003_queue_guests_tax_invoice.sql` → `004_protect_profiles.sql` → `005_table_session_functions.sql` (แก้ schema ครั้งเดียว หลัง `001_initial_schema.sql`) | SQL Editor |
+| 0 | `supabase/migrations/002_v18_fixes.sql` → `003_queue_guests_tax_invoice.sql` → `004_protect_profiles.sql` → `005_table_session_functions.sql` → `006_queue_functions.sql` (แก้ schema ครั้งเดียว หลัง `001_initial_schema.sql`) | SQL Editor |
 | 1 | สร้างบัญชีทดสอบ 5 ตำแหน่ง — เลือก **วิธี A** หรือ **วิธี B** ด้านล่าง | Dashboard / Terminal |
 | 2 | `supabase/seed_master.sql` | SQL Editor |
 | 3 | `supabase/seed_demo.sql` (เฉพาะฐานข้อมูลพัฒนา/ทดสอบ) | SQL Editor |
@@ -109,7 +110,7 @@ union all select 'audit_logs', count(*) from audit_logs;
 > - ถ้ารัน `seed_demo.sql` ก่อนสร้างบัญชีครบ 5 ตำแหน่ง ไฟล์จะหยุดพร้อมข้อความ "ไม่พบผู้ใช้ตำแหน่ง ..." และไม่มีข้อมูลใดถูกลบ
 > - ใช้ฐานข้อมูลร่วมกัน: ถ้าใครรัน `seed_demo.sql` ข้อมูลทดสอบของทุกคนถูกรีเซ็ตพร้อมกัน — บอกทีมก่อนรัน
 
-### 2.4 ข้อตกลงสำหรับคนเขียนโค้ด (ผลจาก migration 002-005)
+### 2.4 ข้อตกลงสำหรับคนเขียนโค้ด (ผลจาก migration 002-006)
 
 - Server Action ที่เปลี่ยนสถานะอาหารเป็น `cooking` ต้องใช้ Supabase client ที่มี session ของพนักงาน (`src/lib/supabase/server.js`) — **ห้ามใช้ admin/service role** เพราะ Trigger ตัดสต็อกต้องรู้ว่าใครกด (ถ้าไม่มีจะ error)
 - `payments.amount_paid` = ยอดที่หักจากบิล (ไม่ใช่เงินสดที่ลูกค้ายื่น) และเปลี่ยนบิลเป็น `paid` ได้เมื่อผลรวมการชำระเท่ากับ `total_amount` เท่านั้น
@@ -119,6 +120,7 @@ union all select 'audit_logs', count(*) from audit_logs;
 - **Server Component ที่ดึงข้อมูลด้วย Supabase ต้อง `await connection()` (จาก `next/server`) ก่อนเรียก Supabase** — Supabase เช็คอายุ token ด้วย `Date.now()` ซึ่ง `cacheComponents` ไม่ยอมให้เรียกตอนเตรียมหน้าล่วงหน้า จะขึ้น error "Next.js encountered the unstable value Date.now()" (ตัวอย่าง: `src/app/(pos)/tables/data.js` · Server Action ไม่ต้องใส่)
 - งานโต๊ะ/รอบบริการ **ต้องเรียกผ่านฟังก์ชัน** `supabase.rpc('fn_open_table' | 'fn_move_table' | 'fn_mark_table_cleaned' | 'fn_set_table_disabled' | 'fn_start_closing' | 'fn_record_leftover' | 'fn_issue_qr_token', …)` ห้ามแก้ตาราง `sessions` / `session_tables` / `dining_tables` ตรงๆ — ฟังก์ชันตรวจตำแหน่งและทำทุกขั้นใน Transaction เดียว (error เป็นภาษาไทย แสดงบนหน้าจอได้เลย)
 - บันทึก `audit_logs` ได้เฉพาะในนามตัวเอง (`actor_id` = ผู้ล็อกอิน) และ **ห้ามต่อ `.select()`** หลัง insert (พนักงานทั่วไปอ่าน log ไม่ได้ จะ error)
+- งานคิวเรียกผ่าน `supabase.rpc('fn_issue_queue' | 'fn_update_queue_status', …)` — เลขคิวสร้างในฐานข้อมูล ห้าม insert ตาราง `queues` เอง
 - ออกใบกำกับภาษี **ไม่ต้องส่ง** `invoice_number` — Trigger สร้างเลข `TAX-YYYYMMDD-NNNN` ให้เอง (เริ่ม 0001 ใหม่ทุกวัน ตามเวลาไทย)
 
 ## 3. วิธีรีเซ็ตเมื่อทดสอบจนข้อมูลเละ
@@ -163,9 +165,9 @@ union all select 'audit_logs', count(*) from audit_logs;
 
 | เลขคิว | สถานะ | ผู้ใหญ่ + เด็ก / ขนาดโต๊ะ | URL |
 |---|---|---|---|
-| `C01` | `waiting` | 4 + 2 / large | `/queue/a1000000-0000-4000-8000-000000000003` |
-| `A01` | `called` | 2 + 0 / small | `/queue/a1000000-0000-4000-8000-000000000002` |
-| `B01` | `seated` | 2 + 1 / medium | `/queue/a1000000-0000-4000-8000-000000000001` |
+| `C001` | `waiting` | 4 + 2 / large | `/queue/a1000000-0000-4000-8000-000000000003` |
+| `A001` | `called` | 2 + 0 / small | `/queue/a1000000-0000-4000-8000-000000000002` |
+| `B001` | `seated` | 2 + 1 / medium | `/queue/a1000000-0000-4000-8000-000000000001` |
 
 ## 6. ข้อมูลที่ seed ไว้ และใช้ทดสอบหน้าไหน
 
@@ -189,7 +191,7 @@ union all select 'audit_logs', count(*) from audit_logs;
 | **Session A — T01** | `active` ผู้ใหญ่ 2 เด็ก 1 เพิ่งเปิด; ออเดอร์ 2 รอบ: served 3, cooking 1 (หมูสามชั้น+เผ็ดน้อย), pending 2 (ลูกชิ้น, เต้าหู้ปลาทอด), cancelled 1 (กุ้ง ยกเลิกจาก pending โดย Staff) | ลูกค้า: สั่งอาหาร/สถานะ/สรุป · ครัว: `/kds` · Cashier/Staff: `/tables` |
 | **Session B — T02** | `active` ผู้ใหญ่ 4 **หมดเวลาในอีก 5 นาที**; รอบ 2 สั่งมา 20 นาที: cooking 2, pending 1, cancelled 1 (หมูสามชั้นย่าง ยกเลิกระหว่าง cooking → คืนสต็อก `cancel_return`) | ตัวจับเวลา/ล็อกสั่งเมื่อหมดเวลา, สีเตือนรอนานใน KDS |
 | **Session C — T03** | `billed` ผู้ใหญ่ 3 เด็ก 2; ชั่งเนื้อเหลือ 250 g → ค่าปรับ 300; บิล `unpaid` = 1,195 + วากิว 159 + 300 = **1,654.00** (VAT ถอดใน 108.21) พร้อม `bill_items` 4 บรรทัด | Cashier: `/billing`, `/billing/tax-invoice` (รับชำระ, Split, ใบกำกับภาษี) |
-| `queues` | C01 waiting, A01 called, B01 seated | Cashier: `/queues` · ลูกค้า: `/queue/[queueId]` |
+| `queues` | C001 waiting, A001 called, B001 seated | Cashier: `/queues` · ลูกค้า: `/queue/[queueId]` |
 | `service_requests` | T01 ขอน้ำ (`pending`), T02 ขอเปลี่ยนหม้อ (`completed` โดย Staff) | Staff: `/service-requests` · ลูกค้า: `/order/T01/call-staff` |
 | `stock_counts` | 1 รอบ `pending_review` (ผู้ตรวจนับ = manager) ผลต่าง: หมูสันคอ −150, เนื้อวัว −80, ผักกาดขาว +200, เห็ด 0 | Manager: `/inventory` (หน้าอนุมัติปรับยอด) |
 | ประวัติ 7 วัน | Session `closed` 15 รอบ (7 วันก่อน 3 รอบ, วันอื่นวันละ 2 รอบ เวลาไทย 11:30/18:00/20:15) บิล `paid` ทุกใบ ชำระ cash / promptpay / credit_card; **1 บิลแบ่งจ่าย** (เงินสด 500 + PromptPay); 4 บิลมีค่าปรับเนื้อเหลือ; 1 บิลมีส่วนลด 100 บาท; 3 บิลมีวากิวสั่งเพิ่ม | Manager/Admin: `/reports` (ยอดขายรายวัน, เมนูขายดี, จำนวนลูกค้า) |

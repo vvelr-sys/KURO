@@ -1,7 +1,7 @@
 'use server';
 
-import { headers } from 'next/headers';
 import { refresh } from 'next/cache';
+import { getRequestOrigin, toDisplayError } from '@/lib/action-helpers';
 import { checkActionRole } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { buildOrderUrl, createQrToken } from '@/lib/qr-token';
@@ -64,30 +64,6 @@ async function buildTicket(supabase, sessionId, tableNumber, token) {
 }
 
 /**
- * แปลง error จากฐานข้อมูลเป็นข้อความที่แสดงได้
- * error ที่ฟังก์ชันของเรา RAISE เป็นภาษาไทยอยู่แล้ว → แสดงตรงๆ / error อื่นใช้ข้อความกลาง
- * @param {{ message?: string } | null} error
- * @returns {string}
- */
-function toDisplayError(error) {
-  const message = error?.message ?? '';
-  if (/[฀-๿]/.test(message)) return message;
-  console.error('[tables action]', message);
-  return 'ทำรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง';
-}
-
-/**
- * origin ของเว็บ (ใช้สร้าง URL ใน QR ให้ตรงกับโดเมนที่เปิดอยู่)
- * @returns {Promise<string>}
- */
-async function getRequestOrigin() {
-  const headerList = await headers();
-  const host = headerList.get('x-forwarded-host') ?? headerList.get('host');
-  const protocol = headerList.get('x-forwarded-proto') ?? (host?.startsWith('localhost') ? 'http' : 'https');
-  return `${protocol}://${host}`;
-}
-
-/**
  * เปิดโต๊ะ: สร้างรอบ + ล็อกราคา/เวลา + QR (+ เปลี่ยนคิวเป็น seated ถ้าเลือกคิว)
  * @param {{ tableId: string, tableNumber: string, adultCount: number, childCount: number, queueId?: string|null }} input
  * @returns {Promise<{ error: string|null, ticket: QrTicket|null }>}
@@ -105,7 +81,7 @@ export async function openTable({ tableId, tableNumber, adultCount, childCount, 
     p_token_hash: tokenHash,
     p_queue_id: queueId,
   });
-  if (error) return { error: toDisplayError(error), ticket: null };
+  if (error) return { error: toDisplayError(error, 'tables action'), ticket: null };
 
   refresh();
   const ticket = await buildTicket(supabase, sessionId, tableNumber, token);
@@ -125,7 +101,7 @@ export async function reissueQr({ sessionId, tableNumber }) {
   const { token, tokenHash } = createQrToken();
   const supabase = await createClient();
   const { error } = await supabase.rpc('fn_issue_qr_token', { p_session_id: sessionId, p_token_hash: tokenHash });
-  if (error) return { error: toDisplayError(error), ticket: null };
+  if (error) return { error: toDisplayError(error, 'tables action'), ticket: null };
 
   const ticket = await buildTicket(supabase, sessionId, tableNumber, token);
   if (!ticket) return { error: 'สร้าง QR ไม่สำเร็จ กรุณาลองใหม่', ticket: null };
@@ -147,7 +123,7 @@ export async function moveTable({ sessionId, fromTableId, toTableId }) {
     p_from_table_id: fromTableId,
     p_to_table_id: toTableId,
   });
-  if (error) return { error: toDisplayError(error) };
+  if (error) return { error: toDisplayError(error, 'tables action') };
 
   refresh();
   return { error: null };
@@ -164,7 +140,7 @@ export async function markTableCleaned({ tableId }) {
 
   const supabase = await createClient();
   const { error } = await supabase.rpc('fn_mark_table_cleaned', { p_table_id: tableId });
-  if (error) return { error: toDisplayError(error) };
+  if (error) return { error: toDisplayError(error, 'tables action') };
 
   refresh();
   return { error: null };
@@ -185,7 +161,7 @@ export async function setTableDisabled({ tableId, disabled, reason = '' }) {
     p_disabled: disabled,
     p_reason: reason.trim().slice(0, 500),
   });
-  if (error) return { error: toDisplayError(error) };
+  if (error) return { error: toDisplayError(error, 'tables action') };
 
   refresh();
   return { error: null };
@@ -202,7 +178,7 @@ export async function startClosing({ sessionId }) {
 
   const supabase = await createClient();
   const { error } = await supabase.rpc('fn_start_closing', { p_session_id: sessionId });
-  if (error) return { error: toDisplayError(error) };
+  if (error) return { error: toDisplayError(error, 'tables action') };
 
   refresh();
   return { error: null };
@@ -226,7 +202,7 @@ export async function recordLeftover({ sessionId, weightGrams }) {
     p_session_id: sessionId,
     p_weight_grams: weightGrams,
   });
-  if (error) return { error: toDisplayError(error), penaltyAmount: null };
+  if (error) return { error: toDisplayError(error, 'tables action'), penaltyAmount: null };
 
   refresh();
   return { error: null, penaltyAmount: Number(data) };

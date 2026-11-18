@@ -12,3 +12,7 @@ export { default as LeftoverForm } from './LeftoverForm';
 export { default as GuestStepper } from './GuestStepper';
 export { RemainingTimeBadge, RemainingTimeLarge, ElapsedBar } from './TableTimer';
 export { getTableDisplay, formatGuestCount, TABLE_DISPLAY_STYLES } from './tableDisplay';
+export { default as QueueBoard } from './QueueBoard';
+export { default as QueueIssueForm } from './QueueIssueForm';
+export { default as QueueRow } from './QueueRow';
+export { default as QueueTicket } from './QueueTicket';

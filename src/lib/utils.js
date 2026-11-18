@@ -79,3 +79,19 @@ const clockTimeFormatter = new Intl.DateTimeFormat('th-TH', {
 export function formatClockTime(value) {
   return `${clockTimeFormatter.format(new Date(value))} น.`;
 }
+
+/**
+ * เวลาเริ่มต้นของ "วันนี้" ตามเวลาไทย (00:00 น.) เป็น ISO string — ใช้กรองข้อมูลของวันนี้ เช่น คิววันนี้
+ * ประเทศไทยไม่มี Daylight Saving จึงใช้ +07:00 ได้ตลอด
+ * @param {Date} [now=new Date()]
+ * @returns {string}
+ */
+export function getBangkokDayStartIso(now = new Date()) {
+  const dateText = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now); // รูปแบบ YYYY-MM-DD
+  return new Date(`${dateText}T00:00:00+07:00`).toISOString();
+}

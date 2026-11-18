@@ -8,7 +8,7 @@
 -- ############################################################
 --
 -- KURO POS — Seed ข้อมูลจำลองการใช้งาน (Demo Data) v1.8
--- ลำดับการรัน: migrations/002 → 003 → 004 → 005 → สร้างบัญชี (seed_profiles.sql หรือ scripts/seed-users.mjs) → seed_master.sql → seed_demo.sql (ไฟล์นี้)
+-- ลำดับการรัน: migrations/002 → 003 → 004 → 005 → 006 → สร้างบัญชี (seed_profiles.sql หรือ scripts/seed-users.mjs) → seed_master.sql → seed_demo.sql (ไฟล์นี้)
 -- รีเซ็ตข้อมูลเมื่อทดสอบจนเละ: รันไฟล์นี้ซ้ำได้ทันที (ทั้งไฟล์อยู่ใน Transaction เดียว
 --   ถ้าผิดพลาดตรงไหนจะ ROLLBACK ทั้งหมด ข้อมูลเดิมไม่เสีย)
 --
@@ -320,11 +320,11 @@ END $$;
 -- ขั้นที่ 5: คิวหน้าร้าน 3 รายการ (waiting / called / seated)
 --   เลขคิว: A = โต๊ะเล็ก (1-2), B = กลาง (3-4), C = ใหญ่ (5+)
 -- ============================================================
---   B01 = ผู้ใหญ่ 2 เด็ก 1 ตรงกับ Session A (T01) ที่เปิดจากคิวนี้
+--   B001 = ผู้ใหญ่ 2 เด็ก 1 ตรงกับ Session A (T01) ที่เปิดจากคิวนี้ (เลขคิว 3 หลักตาม migration 006)
 INSERT INTO queues (id, queue_number, guest_count, adult_count, child_count, table_size, status, phone_number, called_at, seated_at, created_at) VALUES
-    ('a1000000-0000-4000-8000-000000000001', 'B01', 3, 2, 1, 'medium', 'seated',  NULL,         now() - interval '5 minutes', now(), now() - interval '30 minutes'),
-    ('a1000000-0000-4000-8000-000000000002', 'A01', 2, 2, 0, 'small',  'called',  NULL,         now() - interval '2 minutes', NULL,  now() - interval '20 minutes'),
-    ('a1000000-0000-4000-8000-000000000003', 'C01', 6, 4, 2, 'large',  'waiting', '0800000000', NULL,                         NULL,  now() - interval '8 minutes')
+    ('a1000000-0000-4000-8000-000000000001', 'B001', 3, 2, 1, 'medium', 'seated',  NULL,         now() - interval '5 minutes', now(), now() - interval '30 minutes'),
+    ('a1000000-0000-4000-8000-000000000002', 'A001', 2, 2, 0, 'small',  'called',  NULL,         now() - interval '2 minutes', NULL,  now() - interval '20 minutes'),
+    ('a1000000-0000-4000-8000-000000000003', 'C001', 6, 4, 2, 'large',  'waiting', '0800000000', NULL,                         NULL,  now() - interval '8 minutes')
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================

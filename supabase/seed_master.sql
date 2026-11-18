@@ -1,7 +1,7 @@
 -- ============================================================
 -- KURO POS — Seed ข้อมูลหลัก (Master Data) v1.8
 -- ------------------------------------------------------------
--- ลำดับการรัน: migrations/002 → 003 → 004 → 005 → สร้างบัญชี (seed_profiles.sql หรือ scripts/seed-users.mjs) → seed_master.sql (ไฟล์นี้) → seed_demo.sql
+-- ลำดับการรัน: migrations/002 → 003 → 004 → 005 → 006 → สร้างบัญชี (seed_profiles.sql หรือ scripts/seed-users.mjs) → seed_master.sql (ไฟล์นี้) → seed_demo.sql
 -- รันซ้ำได้: ทุกแถวใช้ UUID คงที่ + ON CONFLICT ... DO UPDATE
 --   → รันซ้ำ = รีเซ็ตข้อมูลหลักกลับเป็นค่าตั้งต้น (ราคา, สถานะเมนู, สต็อกวัตถุดิบ)
 --   ยกเว้น dining_tables.status ที่จะไม่ถูกเขียนทับ (กันชนกับโต๊ะที่มี Session ใช้งานอยู่)
