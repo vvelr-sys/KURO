@@ -6,3 +6,7 @@ export { default as DiscountEditor } from './DiscountEditor';
 export { default as CashKeypad } from './CashKeypad';
 export { default as ReceiptDocument } from './ReceiptDocument';
 export { PAYMENT_METHOD_LABELS, DISCOUNT_REASON_PRESETS } from './paymentLabels';
+export { default as TaxInvoiceWorkspace } from './TaxInvoiceWorkspace';
+export { default as TaxInvoiceForm } from './TaxInvoiceForm';
+export { default as TaxInvoiceDocument } from './TaxInvoiceDocument';
+export { default as PaidBillPicker } from './PaidBillPicker';
