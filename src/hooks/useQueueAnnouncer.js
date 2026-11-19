@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
+import { playChime } from '@/lib/chime';
 
 // ============================================================
 // เสียงประกาศเรียกคิว
@@ -23,35 +24,6 @@ export function toSpokenQueueNumber(queueNumber) {
   return [...queueNumber.toUpperCase()]
     .map((character) => LETTER_WORDS[character] ?? DIGIT_WORDS[Number(character)] ?? character)
     .join(' ');
-}
-
-/** เล่นเสียงติ๊ง-ต่อง 2 โน้ต (คืน Promise ที่จบเมื่อเสียงจบ) */
-function playChime() {
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) return Promise.resolve();
-  const audioContext = new AudioContextClass();
-  const notes = [
-    { frequency: 880, startAt: 0 },
-    { frequency: 659, startAt: 0.35 },
-  ];
-  for (const { frequency, startAt } of notes) {
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-    oscillator.type = 'sine';
-    oscillator.frequency.value = frequency;
-    gain.gain.setValueAtTime(0.0001, audioContext.currentTime + startAt);
-    gain.gain.exponentialRampToValueAtTime(0.4, audioContext.currentTime + startAt + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + startAt + 0.6);
-    oscillator.connect(gain).connect(audioContext.destination);
-    oscillator.start(audioContext.currentTime + startAt);
-    oscillator.stop(audioContext.currentTime + startAt + 0.65);
-  }
-  return new Promise((resolve) =>
-    setTimeout(() => {
-      audioContext.close();
-      resolve();
-    }, 1000)
-  );
 }
 
 // ----- เก็บค่าเปิด/ปิดเสียงใน localStorage แบบที่ React อ่านได้ (useSyncExternalStore) -----

@@ -104,6 +104,9 @@ export function getTableSizeKey(seatCount) {
   return (TABLE_SIZES.find((size) => seatCount <= size.maxSeats) ?? TABLE_SIZES[TABLE_SIZES.length - 1]).key;
 }
 
+/** คำขอเรียกพนักงานที่รอเกินกี่นาทีถือว่า "รอนาน" (ขึ้นสีแดงและอยู่ในส่วนเตือนด่วน) */
+export const SERVICE_REQUEST_OVERDUE_MINUTES = 3;
+
 /** เหลือเวลาไม่เกินกี่นาทีถึงขึ้นสีเตือน "ใกล้หมดเวลา" บนผังโต๊ะ */
 export const NEAR_EXPIRY_MINUTES = 10;
 

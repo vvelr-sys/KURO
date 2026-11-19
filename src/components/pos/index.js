@@ -16,3 +16,6 @@ export { default as QueueBoard } from './QueueBoard';
 export { default as QueueIssueForm } from './QueueIssueForm';
 export { default as QueueRow } from './QueueRow';
 export { default as QueueTicket } from './QueueTicket';
+export { default as ServiceRequestBoard } from './ServiceRequestBoard';
+export { default as ServiceRequestCard } from './ServiceRequestCard';
+export { SERVICE_REQUEST_TYPES } from './serviceRequestTypes';
