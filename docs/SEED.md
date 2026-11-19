@@ -18,6 +18,7 @@
 | [`supabase/migrations/004_protect_profiles.sql`](../supabase/migrations/004_protect_profiles.sql) | ปิดช่องโหว่ `profiles`: อ่านได้เฉพาะพนักงานที่ล็อกอิน และไม่มีใครอ่าน `pin_hash` ผ่าน API ได้ | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
 | [`supabase/migrations/005_table_session_functions.sql`](../supabase/migrations/005_table_session_functions.sql) | ฟังก์ชันหน้าผังโต๊ะ (เปิด/ย้าย/เก็บ/ปิดใช้งานโต๊ะ, เชิญออก, ชั่งเนื้อ, พิมพ์ QR) + policy ให้สร้าง QR token และบันทึก audit_logs ได้ | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
 | [`supabase/migrations/006_queue_functions.sql`](../supabase/migrations/006_queue_functions.sql) | ฟังก์ชันคิว: ออกบัตรคิว (เลขคิว A/B/C + 3 หลัก เริ่ม 001 ทุกวัน กันเลขซ้ำ), เรียก/เรียกซ้ำ/ข้าม/ยกเลิก | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
+| [`supabase/migrations/007_billing_functions.sql`](../supabase/migrations/007_billing_functions.sql) | ฟังก์ชันคิดเงิน: ออกบิล (เลข INV-YYYYMMDD-NNN), ส่วนลด + Audit Log, รับชำระ/แบ่งจ่าย แล้วปิดรอบ · `payments` เพิ่ม `reference_note`, `cash_tendered` · พนักงานอ่านข้อมูลร้านใน `app_settings` ได้ | ✅ รันซ้ำได้ ไม่แก้ข้อมูลเดิม |
 | [`supabase/seed_master.sql`](../supabase/seed_master.sql) | ข้อมูลหลัก: ตั้งค่า VAT/ค่าปรับ, แพ็กเกจ, โต๊ะ T01-T08, หมวด, วัตถุดิบ, เมนู, ตัวเลือก, BOM, อัตราใช้ต่อหัว | ✅ รันซ้ำ = รีเซ็ตข้อมูลหลักกลับค่าตั้งต้น (ยกเว้นสถานะโต๊ะ) |
 | [`supabase/seed_demo.sql`](../supabase/seed_demo.sql) | ล้างข้อมูลการใช้งาน แล้วใส่ข้อมูลจำลอง (คิว, 3 โต๊ะกำลังใช้งาน, ออเดอร์, บิล, ประวัติ 7 วัน ฯลฯ) | ✅ ทั้งไฟล์อยู่ใน Transaction เดียว ผิดพลาดตรงไหน ROLLBACK ทั้งหมด |
 
@@ -27,7 +28,7 @@
 
 | ลำดับ | ทำอะไร | ที่ไหน |
 |:---:|---|---|
-| 0 | `supabase/migrations/002_v18_fixes.sql` → `003_queue_guests_tax_invoice.sql` → `004_protect_profiles.sql` → `005_table_session_functions.sql` → `006_queue_functions.sql` (แก้ schema ครั้งเดียว หลัง `001_initial_schema.sql`) | SQL Editor |
+| 0 | `supabase/migrations/002_v18_fixes.sql` → `003_queue_guests_tax_invoice.sql` → `004_protect_profiles.sql` → `005_table_session_functions.sql` → `006_queue_functions.sql` → `007_billing_functions.sql` (แก้ schema ครั้งเดียว หลัง `001_initial_schema.sql`) | SQL Editor |
 | 1 | สร้างบัญชีทดสอบ 5 ตำแหน่ง — เลือก **วิธี A** หรือ **วิธี B** ด้านล่าง | Dashboard / Terminal |
 | 2 | `supabase/seed_master.sql` | SQL Editor |
 | 3 | `supabase/seed_demo.sql` (เฉพาะฐานข้อมูลพัฒนา/ทดสอบ) | SQL Editor |
@@ -110,7 +111,7 @@ union all select 'audit_logs', count(*) from audit_logs;
 > - ถ้ารัน `seed_demo.sql` ก่อนสร้างบัญชีครบ 5 ตำแหน่ง ไฟล์จะหยุดพร้อมข้อความ "ไม่พบผู้ใช้ตำแหน่ง ..." และไม่มีข้อมูลใดถูกลบ
 > - ใช้ฐานข้อมูลร่วมกัน: ถ้าใครรัน `seed_demo.sql` ข้อมูลทดสอบของทุกคนถูกรีเซ็ตพร้อมกัน — บอกทีมก่อนรัน
 
-### 2.4 ข้อตกลงสำหรับคนเขียนโค้ด (ผลจาก migration 002-006)
+### 2.4 ข้อตกลงสำหรับคนเขียนโค้ด (ผลจาก migration 002-007)
 
 - Server Action ที่เปลี่ยนสถานะอาหารเป็น `cooking` ต้องใช้ Supabase client ที่มี session ของพนักงาน (`src/lib/supabase/server.js`) — **ห้ามใช้ admin/service role** เพราะ Trigger ตัดสต็อกต้องรู้ว่าใครกด (ถ้าไม่มีจะ error)
 - `payments.amount_paid` = ยอดที่หักจากบิล (ไม่ใช่เงินสดที่ลูกค้ายื่น) และเปลี่ยนบิลเป็น `paid` ได้เมื่อผลรวมการชำระเท่ากับ `total_amount` เท่านั้น
@@ -121,6 +122,8 @@ union all select 'audit_logs', count(*) from audit_logs;
 - งานโต๊ะ/รอบบริการ **ต้องเรียกผ่านฟังก์ชัน** `supabase.rpc('fn_open_table' | 'fn_move_table' | 'fn_mark_table_cleaned' | 'fn_set_table_disabled' | 'fn_start_closing' | 'fn_record_leftover' | 'fn_issue_qr_token', …)` ห้ามแก้ตาราง `sessions` / `session_tables` / `dining_tables` ตรงๆ — ฟังก์ชันตรวจตำแหน่งและทำทุกขั้นใน Transaction เดียว (error เป็นภาษาไทย แสดงบนหน้าจอได้เลย)
 - บันทึก `audit_logs` ได้เฉพาะในนามตัวเอง (`actor_id` = ผู้ล็อกอิน) และ **ห้ามต่อ `.select()`** หลัง insert (พนักงานทั่วไปอ่าน log ไม่ได้ จะ error)
 - งานคิวเรียกผ่าน `supabase.rpc('fn_issue_queue' | 'fn_update_queue_status', …)` — เลขคิวสร้างในฐานข้อมูล ห้าม insert ตาราง `queues` เอง
+- คิดเงินเรียกผ่าน `supabase.rpc('fn_create_bill' | 'fn_apply_discount' | 'fn_pay_bill', …)` — ยอดเงินทั้งหมดคำนวณในฐานข้อมูล ห้าม insert/update `bills` `bill_items` `payments` เอง
+- ข้อมูลร้านบนใบเสร็จอยู่ใน `app_settings` คีย์ `store_name`, `store_branch`, `store_address`, `store_tax_id`, `store_phone` (seed เป็นค่าตัวอย่าง)
 - ออกใบกำกับภาษี **ไม่ต้องส่ง** `invoice_number` — Trigger สร้างเลข `TAX-YYYYMMDD-NNNN` ให้เอง (เริ่ม 0001 ใหม่ทุกวัน ตามเวลาไทย)
 
 ## 3. วิธีรีเซ็ตเมื่อทดสอบจนข้อมูลเละ
