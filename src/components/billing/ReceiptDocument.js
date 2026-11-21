@@ -35,6 +35,7 @@ export default function ReceiptDocument({ variant, store, session, bill }) {
         {store.address && <p className="text-xs">{store.address}</p>}
         {store.taxId && <p className="text-xs">เลขประจำตัวผู้เสียภาษี {store.taxId}</p>}
         {store.phone && <p className="text-xs">โทร {store.phone}</p>}
+        {store.headerMessage && <p className="mt-1 text-xs italic">{store.headerMessage}</p>}
         <p className="mt-2 w-full rounded-md bg-surface py-1 text-xs font-bold">
           {isReceipt ? 'ใบเสร็จรับเงิน / ใบกำกับภาษีอย่างย่อ' : 'ใบแจ้งค่าอาหาร (ยังไม่ใช่ใบเสร็จ)'}
         </p>
@@ -94,7 +95,7 @@ export default function ReceiptDocument({ variant, store, session, bill }) {
       )}
 
       <p className="border-t border-dashed border-ink-muted/40 pt-2 text-center text-xs text-ink-muted">
-        {isReceipt ? 'ขอบคุณที่ใช้บริการ' : 'กรุณาชำระเงินที่แคชเชียร์'}
+        {isReceipt ? store.footerMessage || 'ขอบคุณที่ใช้บริการ' : 'กรุณาชำระเงินที่แคชเชียร์'}
       </p>
     </div>
   );

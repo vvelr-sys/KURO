@@ -19,6 +19,7 @@
 | [`supabase/migrations/005_table_session_functions.sql`](../supabase/migrations/005_table_session_functions.sql) | ฟังก์ชันหน้าผังโต๊ะ (เปิด/ย้าย/เก็บ/ปิดใช้งานโต๊ะ, เชิญออก, ชั่งเนื้อ, พิมพ์ QR) + policy ให้สร้าง QR token และบันทึก audit_logs ได้ | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
 | [`supabase/migrations/006_queue_functions.sql`](../supabase/migrations/006_queue_functions.sql) | ฟังก์ชันคิว: ออกบัตรคิว (เลขคิว A/B/C + 3 หลัก เริ่ม 001 ทุกวัน กันเลขซ้ำ), เรียก/เรียกซ้ำ/ข้าม/ยกเลิก | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
 | [`supabase/migrations/007_billing_functions.sql`](../supabase/migrations/007_billing_functions.sql) | ฟังก์ชันคิดเงิน: ออกบิล (เลข INV-YYYYMMDD-NNN), ส่วนลด + Audit Log, รับชำระ/แบ่งจ่าย แล้วปิดรอบ · `payments` เพิ่ม `reference_note`, `cash_tendered` · พนักงานอ่านข้อมูลร้านใน `app_settings` ได้ | ✅ รันซ้ำได้ ไม่แก้ข้อมูลเดิม |
+| [`supabase/migrations/008_settings_receipt_messages.sql`](../supabase/migrations/008_settings_receipt_messages.sql) | ให้พนักงานอ่านข้อความหัว/ท้ายใบเสร็จ (`receipt_header_message`, `receipt_footer_message`) | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
 | [`supabase/seed_master.sql`](../supabase/seed_master.sql) | ข้อมูลหลัก: ตั้งค่า VAT/ค่าปรับ, แพ็กเกจ, โต๊ะ T01-T08, หมวด, วัตถุดิบ, เมนู, ตัวเลือก, BOM, อัตราใช้ต่อหัว | ✅ รันซ้ำ = รีเซ็ตข้อมูลหลักกลับค่าตั้งต้น (ยกเว้นสถานะโต๊ะ) |
 | [`supabase/seed_demo.sql`](../supabase/seed_demo.sql) | ล้างข้อมูลการใช้งาน แล้วใส่ข้อมูลจำลอง (คิว, 3 โต๊ะกำลังใช้งาน, ออเดอร์, บิล, ประวัติ 7 วัน ฯลฯ) | ✅ ทั้งไฟล์อยู่ใน Transaction เดียว ผิดพลาดตรงไหน ROLLBACK ทั้งหมด |
 
@@ -28,7 +29,7 @@
 
 | ลำดับ | ทำอะไร | ที่ไหน |
 |:---:|---|---|
-| 0 | `supabase/migrations/002_v18_fixes.sql` → `003_queue_guests_tax_invoice.sql` → `004_protect_profiles.sql` → `005_table_session_functions.sql` → `006_queue_functions.sql` → `007_billing_functions.sql` (แก้ schema ครั้งเดียว หลัง `001_initial_schema.sql`) | SQL Editor |
+| 0 | `supabase/migrations/002_v18_fixes.sql` → `003_queue_guests_tax_invoice.sql` → `004_protect_profiles.sql` → `005_table_session_functions.sql` → `006_queue_functions.sql` → `007_billing_functions.sql` → `008_settings_receipt_messages.sql` (แก้ schema ครั้งเดียว หลัง `001_initial_schema.sql`) | SQL Editor |
 | 1 | สร้างบัญชีทดสอบ 5 ตำแหน่ง — เลือก **วิธี A** หรือ **วิธี B** ด้านล่าง | Dashboard / Terminal |
 | 2 | `supabase/seed_master.sql` | SQL Editor |
 | 3 | `supabase/seed_demo.sql` (เฉพาะฐานข้อมูลพัฒนา/ทดสอบ) | SQL Editor |

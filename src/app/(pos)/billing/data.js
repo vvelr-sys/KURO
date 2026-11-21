@@ -53,6 +53,8 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
  * @property {string} address
  * @property {string} taxId
  * @property {string} phone
+ * @property {string} headerMessage - ข้อความต้อนรับหัวใบเสร็จ (ว่างได้)
+ * @property {string} footerMessage - ข้อความขอบคุณท้ายใบเสร็จ (ว่างได้)
  * @property {number} vatRatePercent
  */
 
@@ -240,7 +242,7 @@ function buildPreviewLines(session, adultPrice, childPrice, extraItems, leftover
 }
 
 /**
- * ข้อมูลร้านสำหรับหัวใบเสร็จ (migration 007 เปิดให้พนักงานอ่านเฉพาะคีย์เหล่านี้)
+ * ข้อมูลร้านสำหรับหัวใบเสร็จ (migration 007/008 เปิดให้พนักงานอ่านเฉพาะคีย์เหล่านี้)
  * @returns {Promise<StoreInfo>}
  */
 export async function getStoreInfo() {
@@ -249,7 +251,7 @@ export async function getStoreInfo() {
   const { data } = await supabase
     .from('app_settings')
     .select('key, value')
-    .in('key', ['store_name', 'store_branch', 'store_address', 'store_tax_id', 'store_phone', 'vat_rate_percent']);
+    .in('key', ['store_name', 'store_branch', 'store_address', 'store_tax_id', 'store_phone', 'receipt_header_message', 'receipt_footer_message', 'vat_rate_percent']);
 
   const settings = Object.fromEntries((data ?? []).map((row) => [row.key, row.value]));
   return {
@@ -258,6 +260,8 @@ export async function getStoreInfo() {
     address: settings.store_address ?? '',
     taxId: settings.store_tax_id ?? '',
     phone: settings.store_phone ?? '',
+    headerMessage: settings.receipt_header_message ?? '',
+    footerMessage: settings.receipt_footer_message ?? '',
     vatRatePercent: Number(settings.vat_rate_percent ?? 7),
   };
 }
