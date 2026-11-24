@@ -143,7 +143,8 @@ KURO/
         ├── 021_fix_cancel_return_actor.sql          # แก้ผู้ทำรายการของ 020 + SET search_path
         ├── 022_staff_stock_counting.sql             # นับสต็อกเช้า-เย็นโดย staff + รับของเข้า/ของเสีย + อนุมัติ
         ├── 023_kitchen_read_sessions.sql            # ให้ kitchen อ่าน sessions/session_tables (จอครัวหาเลขโต๊ะ)
-        └── 024_inventory_reports_audit.sql          # FR-024 ปิด/เปิดเมนูอัตโนมัติ, Manager แก้ BOM, Admin ปรับยอดฉุกเฉิน, สิทธิ์อ่าน Audit Log
+        ├── 024_inventory_reports_audit.sql          # FR-024 ปิด/เปิดเมนูอัตโนมัติ, Manager แก้ BOM, Admin ปรับยอดฉุกเฉิน, สิทธิ์อ่าน Audit Log
+        └── 025_customer_ordering.sql                # หน้าสั่งอาหารลูกค้า: ฟังก์ชันรับ QR token + ปิด RLS ที่ให้ anon เขียน orders/order_items ตรง
 ```
 
 ---
@@ -483,3 +484,4 @@ export const calcBuffetTotal = (session) =>
 | **ยอดคงเหลือแก้ตรงไม่ได้** (25 พ.ย. 2026) | หน้าวัตถุดิบแก้ได้แค่ชื่อ/หน่วย/จุดสั่งซื้อ · ยอดเปลี่ยนผ่านรับเข้า/ของเสีย/อนุมัติผลนับ/Admin ปรับฉุกเฉินเท่านั้น | ทุกการเปลี่ยนยอดมีแถวใน `stock_movements` · ปรับฉุกเฉินใช้ `fn_emergency_adjust_stock` + Audit `EMERGENCY_OVERRIDE` |
 | **รายงานยอดขาย** (25 พ.ย. 2026) | นับเฉพาะบิล `paid` ตามเวลาชำระ (เวลาไทย) · ช่วงเกิน 62 วันรวมเป็นรายเดือน · เมนูขายดีนับจานที่ไม่ถูกยกเลิก | Export = CSV (มี BOM เปิดด้วย Excel ได้) + พิมพ์/บันทึก PDF ผ่าน `PrintPortal` ไม่ลง package เพิ่ม |
 | **สิทธิ์ดู Audit Log** (25 พ.ย. 2026) | Admin เห็นทั้งหมด · Manager เห็นทั้งหมดยกเว้นรายการที่ Admin เป็นผู้ทำ | บังคับใน RLS (`fn_is_admin_profile`, migration 024) |
+| **ลูกค้าสั่งอาหาร** (25 พ.ย. 2026) | ลูกค้าเข้าถึงข้อมูลผ่านฟังก์ชันที่รับ hash ของ QR token เท่านั้น · เมนูมีตัวเลือกให้เลือกกลุ่มละ 1 ก่อนใส่ตะกร้า · เมนูสั่งเพิ่มแสดงป้าย "สั่งเพิ่ม +ราคา" · ไม่จำกัดจำนวนสั่ง | migration 025 — token อยู่ใน cookie httpOnly `kuro_order_token` (proxy ตั้งตอนสแกนแล้วลบ `?t=` จาก URL) · `fn_customer_place_order` ตรวจ `expires_at`, เมนู `available`, ตัวเลือกครบ · `unit_price_snapshot` = `extra_price` + ราคาตัวเลือก · anon อ่าน/เขียน `orders` `order_items` ตรงไม่ได้แล้ว |

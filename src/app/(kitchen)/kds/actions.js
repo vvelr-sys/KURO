@@ -37,6 +37,11 @@ export async function getKitchenOrders(selectedStation = null) {
           name,
           kitchen_station
         ),
+        order_item_options (
+          menu_item_options (
+            option_name
+          )
+        ),
         orders!inner (
           id,
           session_id,
@@ -110,6 +115,10 @@ export async function getKitchenOrders(selectedStation = null) {
         cancel_reason: item.cancelled_reason,
         created_at: item.created_at,
         station: item.menu_items?.kitchen_station,
+        // ตัวเลือกที่ลูกค้าเลือก เช่น "น้ำจิ้มงา", "เผ็ดน้อย" (migration 025 ให้พนักงานอ่านได้)
+        options: (item.order_item_options || [])
+          .map((chosen) => chosen.menu_item_options?.option_name)
+          .filter(Boolean),
       });
     }
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { updateSession } from '@/lib/supabase/proxy';
+import { CUSTOMER_TOKEN_COOKIE, CUSTOMER_TOKEN_MAX_AGE_SECONDS } from '@/lib/constants';
 
 // Proxy (ชื่อเดิมใน Next 15 คือ Middleware) ทำงานก่อนทุกหน้า
 // หน้าที่: 1) ต่ออายุ session  2) ยังไม่ล็อกอินแต่เข้าหน้าพนักงาน → ส่งไป /login
@@ -24,9 +25,39 @@ function isPublicPath(path) {
 }
 
 /**
+ * ลูกค้าสแกน QR โต๊ะ: /order/T01?t=<token> → เก็บ token ใน cookie (httpOnly) แล้วพาไป /order/T01
+ * แถบ URL จะไม่มี token (กันลูกค้าแชร์ลิงก์/ภาพหน้าจอแล้ว token หลุด)
+ * ตรงนี้ยังไม่ตรวจกับฐานข้อมูล — หน้า /order ตรวจ token ทุกครั้งที่โหลดผ่าน fn_customer_get_session
+ * @param {import('next/server').NextRequest} request
+ * @returns {NextResponse|null} null = ไม่ใช่ลิงก์จาก QR
+ */
+function storeCustomerTokenFromQr(request) {
+  const path = request.nextUrl.pathname;
+  const token = request.nextUrl.searchParams.get('t');
+  if (!token || !path.startsWith('/order/')) return null;
+
+  const cleanUrl = request.nextUrl.clone();
+  cleanUrl.searchParams.delete('t');
+
+  const redirectResponse = NextResponse.redirect(cleanUrl);
+  redirectResponse.cookies.set(CUSTOMER_TOKEN_COOKIE, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: request.nextUrl.protocol === 'https:',
+    path: '/order',
+    maxAge: CUSTOMER_TOKEN_MAX_AGE_SECONDS,
+  });
+  return redirectResponse;
+}
+
+/**
  * @param {import('next/server').NextRequest} request
  */
 export async function proxy(request) {
+  // ลูกค้าไม่ต้องต่ออายุ session พนักงาน → ทำก่อน updateSession ให้เร็วที่สุด
+  const qrRedirect = storeCustomerTokenFromQr(request);
+  if (qrRedirect) return qrRedirect;
+
   const { response, userId } = await updateSession(request);
   const path = request.nextUrl.pathname;
 

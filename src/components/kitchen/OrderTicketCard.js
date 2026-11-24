@@ -249,6 +249,9 @@ const OrderTicketCard = React.memo(function OrderTicketCard({ order, nowTimestam
 
                 <div className="min-w-0 flex-1 leading-tight">
                   <p className={cn("font-semibold", isServed && "text-ink-muted line-through")}>{dish.menu_item_name}</p>
+                  {dish.options?.length > 0 && (
+                    <p className="text-sm font-semibold text-ink">{dish.options.join(", ")}</p>
+                  )}
                   <p className={cn("text-xs", isCooking ? "font-semibold text-primary" : "text-ink-muted")}>
                     {dish.status === "pending" && "รอทำ — แตะเพื่อเริ่มทำ"}
                     {isCooking && "กำลังทำ — แตะเมื่อเสิร์ฟ"}
