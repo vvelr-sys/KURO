@@ -117,108 +117,96 @@ export async function getKitchenOrders(selectedStation = null) {
   }
 }
 
-/**
- * ดึงรายการออเดอร์ที่เพิ่งเสิร์ฟล่าสุด (Recall Panel)
- * @param {number} limit
- */
-export async function getRecentlyServedOrders(limit = 6) {
-  try {
-    const supabase = await createClient();
-
-    const { data, error } = await supabase
-      .from('order_items')
-      .select(`
-        id,
-        order_id,
-        quantity,
-        status,
-        created_at,
-        menu_items!inner (
-          name
-        ),
-        orders!inner (
-          id,
-          sessions!inner (
-            session_tables (
-              is_active,
-              dining_tables (
-                table_number
-              )
-            )
-          )
-        )
-      `)
-      .eq('status', 'served')
-      .order('created_at', { ascending: false })
-      .limit(limit);
-
-    if (error) {
-      return { items: [], error: error.message };
-    }
-
-    const formatted = (data || []).map((item) => {
-      const sessionTables = item.orders?.sessions?.session_tables || [];
-      const tables = sessionTables
-        .filter((st) => st.is_active && st.dining_tables?.table_number)
-        .map((st) => st.dining_tables.table_number);
-      const tableLabel = tables.length > 0 ? tables.join(' + ') : 'ไม่ระบุ';
-
-      return {
-        id: item.id,
-        order_id: item.order_id,
-        table_number: tableLabel,
-        menu_name: item.menu_items?.name || 'เมนู',
-        quantity: item.quantity,
-        created_at: item.created_at,
-      };
-    });
-
-    return { items: formatted, error: null };
-  } catch (err) {
-    return { items: [], error: err.message };
-  }
-}
+// การเปลี่ยนสถานะที่อนุญาตบนจอครัว (SRS FR-021, FR-047–049)
+// served เป็นสถานะสุดท้าย ย้อนกลับหรือยกเลิกไม่ได้
+const ALLOWED_TRANSITIONS = {
+  pending: ['cooking', 'cancelled'],
+  cooking: ['served', 'cancelled'],
+};
 
 /**
  * อัปเดตสถานะของอาหารแต่ละจาน
- * 
+ * - pending → cooking : ตัดสต็อกตาม BOM (DB trigger fn_deduct_stock_on_cooking)
+ * - cooking → served
+ * - pending/cooking → cancelled : ต้องมีเหตุผล, ถ้าเป็น cooking ระบบคืนสต็อกอัตโนมัติ
+ *   (DB trigger fn_return_stock_on_cancel) และบันทึก Audit Log
+ *
  * @param {string} itemId - รหัสรายการอาหาร
- * @param {string} newStatus - สถานะใหม่ ('pending', 'cooking', 'served', 'cancelled')
- * @param {string|null} cancelReason - เหตุผลกรณียกเลิก
+ * @param {'cooking'|'served'|'cancelled'} newStatus - สถานะใหม่
+ * @param {string|null} cancelReason - เหตุผลกรณียกเลิก (บังคับเมื่อ cancelled)
  */
-export async function updateOrderItemStatus(itemId, newStatus, cancelReason) {
+export async function updateOrderItemStatus(itemId, newStatus, cancelReason = null) {
   try {
     const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    // กฎธุรกิจ: ถ้ากด 'served' (เสิร์ฟแล้ว) ให้แวะสถานะ 'cooking' ก่อน เพื่อให้ระบบตัดสต็อกวัตถุดิบ
-    if (newStatus === 'served') {
-      await supabase
-        .from('order_items')
-        .update({ status: 'cooking' })
-        .eq('id', itemId)
-        .eq('status', 'pending');
+    const { data: currentItem, error: fetchError } = await supabase
+      .from('order_items')
+      .select('status, quantity, menu_items(name)')
+      .eq('id', itemId)
+      .single();
+
+    if (fetchError || !currentItem) {
+      return { success: false, error: 'ไม่พบรายการอาหารนี้' };
     }
 
-    // ข้อมูลที่จะอัปเดต
+    const allowed = ALLOWED_TRANSITIONS[currentItem.status] || [];
+    if (!allowed.includes(newStatus)) {
+      return {
+        success: false,
+        error: `ไม่สามารถเปลี่ยนสถานะจาก '${currentItem.status}' เป็น '${newStatus}' ได้`,
+      };
+    }
+
     const updatePayload = { status: newStatus };
 
-    // ถ้าเป็นการยกเลิก ให้บันทึกเหตุผลและเวลาที่ยกเลิกด้วย
     if (newStatus === 'cancelled') {
-      updatePayload.cancelled_reason = cancelReason ? cancelReason.trim() : 'ไม่ระบุเหตุผล';
+      const reason = cancelReason?.trim();
+      if (!reason) {
+        return { success: false, error: 'กรุณาระบุเหตุผลในการยกเลิก' };
+      }
+      updatePayload.cancelled_reason = reason;
       updatePayload.cancelled_at = new Date().toISOString();
+      updatePayload.cancelled_by = user?.id ?? null;
     }
 
-    const { error } = await supabase
+    // อัปเดตแบบมีเงื่อนไขสถานะเดิม กันกรณีมีคนกดพร้อมกันหลายจอ
+    const { data: updated, error } = await supabase
       .from('order_items')
       .update(updatePayload)
-      .eq('id', itemId);
+      .eq('id', itemId)
+      .eq('status', currentItem.status)
+      .select('id');
 
     if (error) {
       console.error('ไม่สามารถอัปเดตสถานะอาหารได้:', error.message);
       return { success: false, error: error.message };
     }
+    if (!updated || updated.length === 0) {
+      return { success: false, error: 'รายการนี้ถูกเปลี่ยนสถานะไปแล้ว กรุณารีเฟรช' };
+    }
 
-    revalidatePath('/(kitchen)/kds');
+    if (newStatus === 'cancelled') {
+      // Audit Log: CANCEL_ORDER_ITEM (audit_matrix.md)
+      const { error: auditError } = await supabase.from('audit_logs').insert({
+        actor_id: user?.id ?? null,
+        action: 'CANCEL_ORDER_ITEM',
+        target_entity: 'order_items',
+        target_id: itemId,
+        reason: updatePayload.cancelled_reason,
+        payload_before: { status: currentItem.status },
+        payload_after: {
+          status: 'cancelled',
+          menu_item_name: currentItem.menu_items?.name ?? null,
+          quantity: currentItem.quantity,
+        },
+      });
+      if (auditError) {
+        console.error('บันทึก Audit Log ไม่สำเร็จ:', auditError.message);
+      }
+    }
+
+    revalidatePath('/kds');
     return { success: true, error: null };
   } catch (err) {
     console.error('เกิดข้อผิดพลาด:', err.message);
@@ -227,30 +215,8 @@ export async function updateOrderItemStatus(itemId, newStatus, cancelReason) {
 }
 
 /**
- * เรียกคืนรายการที่เสิร์ฟไปแล้วกลับมาเป็น cooking / pending
- */
-export async function recallOrderItem(itemId) {
-  try {
-    const supabase = await createClient();
-
-    const { error } = await supabase
-      .from('order_items')
-      .update({ status: 'cooking' })
-      .eq('id', itemId);
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    revalidatePath('/(kitchen)/kds');
-    return { success: true, error: null };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-}
-
-/**
- * กดทำเสร็จทั้งหมดทุกจานในโต๊ะนี้ (จบทั้งบิลในคลิกเดียว)
+ * ทำเสร็จทั้งหมดในบิลนี้ (Batch Action — FR-021)
+ * จานที่ยัง pending จะผ่าน cooking ก่อนเพื่อให้ตัดสต็อกตาม BOM แล้วจึงเป็น served
  *
  * @param {string} orderId - รหัสบิลออเดอร์
  */
@@ -258,26 +224,31 @@ export async function markAllServed(orderId) {
   try {
     const supabase = await createClient();
 
-    // 1. ตัดสต็อกวัตถุดิบสำหรับจานที่ยังรอทำอยู่
-    await supabase
+    // 1. pending -> cooking (trigger ตัดสต็อก)
+    const { error: cookingError } = await supabase
       .from('order_items')
       .update({ status: 'cooking' })
       .eq('order_id', orderId)
       .eq('status', 'pending');
 
-    // 2. เปลี่ยนสถานะทุกจานในบิลนี้ให้เป็น 'served' (เสร็จทั้งหมด)
+    if (cookingError) {
+      console.error('ตัดสต็อกไม่สำเร็จ:', cookingError.message);
+      return { success: false, error: cookingError.message };
+    }
+
+    // 2. cooking -> served
     const { error } = await supabase
       .from('order_items')
       .update({ status: 'served' })
       .eq('order_id', orderId)
-      .in('status', ['pending', 'cooking']);
+      .eq('status', 'cooking');
 
     if (error) {
       console.error('ไม่สามารถทำเสร็จทั้งหมดได้:', error.message);
       return { success: false, error: error.message };
     }
 
-    revalidatePath('/(kitchen)/kds');
+    revalidatePath('/kds');
     return { success: true, error: null };
   } catch (err) {
     console.error('เกิดข้อผิดพลาด:', err.message);

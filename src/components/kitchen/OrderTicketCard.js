@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
-import { Clock, CheckCheck, X, Check, RotateCcw, ChevronDown, AlertTriangle } from "lucide-react";
+import { Clock, CheckCheck, X, Check, Flame, ChevronDown, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   updateOrderItemStatus,
@@ -129,6 +129,12 @@ const STATION_DISPLAY = {
   hot_kitchen: 'สายไลน์ 4',
 };
 
+// ─── ลำดับสถานะเมื่อแตะ (served เป็นสถานะสุดท้าย) ─────────────────────────
+const NEXT_STATUS = {
+  pending: 'cooking',
+  cooking: 'served',
+};
+
 // ─── การ์ดออเดอร์แต่ละโต๊ะ ───────────────────────────────────────────────────
 
 /**
@@ -152,6 +158,8 @@ const OrderTicketCard = React.memo(function OrderTicketCard({
   const [isFinishingAll, setIsFinishingAll] = useState(false);
   // เปิด/ปิดรายการอาหาร
   const [isExpanded, setIsExpanded] = useState(true);
+  // ข้อความ error ล่าสุด (เช่น วัตถุดิบไม่พอตัดสต็อก)
+  const [actionError, setActionError] = useState(null);
 
   // ─── คำนวณเวลา ───────────────────────────────────────────────────────────
   // หาเวลาเก่าสุดของออเดอร์นี้ (item แรกสุดที่ส่งเข้ามา)
@@ -173,16 +181,15 @@ const OrderTicketCard = React.memo(function OrderTicketCard({
   );
   const hasRemainingDishes = remainingDishes.length > 0;
 
-  // ─── Handler: กดแตะอาหาร 1 ครั้ง = เปลี่ยนสถานะ ─────────────────────────
+  // ─── Handler: แตะอาหารเพื่อเลื่อนสถานะ (FR-021) ──────────────────────────
+  // pending → cooking (ตัดสต็อก BOM) → served (สถานะสุดท้าย ย้อนกลับไม่ได้)
   const handleDishTap = useCallback(async (dish) => {
     if (savingItemIds.has(dish.id)) return; // กำลังบันทึกอยู่ ห้ามกดซ้ำ
 
-    const isServed = dish.status === 'served';
-    // ถ้าเสิร์ฟแล้ว → กดย้อนกลับเป็น cooking
-    // ถ้ายังไม่เสิร์ฟ → เปลี่ยนเป็น served
-    const nextStatus = isServed ? 'cooking' : 'served';
+    const nextStatus = NEXT_STATUS[dish.status];
+    if (!nextStatus) return;
 
-    // Optimistic UI — อัปเดตทันทีก่อนรอ DB
+    setActionError(null);
     setSavingItemIds((prev) => new Set(prev).add(dish.id));
 
     const result = await updateOrderItemStatus(dish.id, nextStatus, null);
@@ -195,6 +202,8 @@ const OrderTicketCard = React.memo(function OrderTicketCard({
 
     if (result.success) {
       onStatusChange?.();
+    } else {
+      setActionError(`${dish.menu_item_name}: ${result.error}`);
     }
   }, [savingItemIds, onStatusChange]);
 
@@ -202,25 +211,30 @@ const OrderTicketCard = React.memo(function OrderTicketCard({
   const handleCancelConfirm = useCallback(async (reason) => {
     if (!dishToCancel) return;
 
-    setSavingItemIds((prev) => new Set(prev).add(dishToCancel.itemId));
+    const { itemId, itemName } = dishToCancel;
+    setActionError(null);
+    setSavingItemIds((prev) => new Set(prev).add(itemId));
     setDishToCancel(null);
 
-    const result = await updateOrderItemStatus(dishToCancel.itemId, 'cancelled', reason);
+    const result = await updateOrderItemStatus(itemId, 'cancelled', reason);
 
     setSavingItemIds((prev) => {
       const next = new Set(prev);
-      next.delete(dishToCancel.itemId);
+      next.delete(itemId);
       return next;
     });
 
     if (result.success) {
       onStatusChange?.();
+    } else {
+      setActionError(`${itemName}: ${result.error}`);
     }
   }, [dishToCancel, onStatusChange]);
 
   // ─── Handler: ทำเสร็จทั้งหมดในบิลนี้ ─────────────────────────────────────
   const handleCompleteAllDishes = useCallback(async () => {
     if (isFinishingAll) return;
+    setActionError(null);
     setIsFinishingAll(true);
 
     const result = await markAllServed(order.order_id);
@@ -228,6 +242,8 @@ const OrderTicketCard = React.memo(function OrderTicketCard({
     setIsFinishingAll(false);
     if (result.success) {
       onStatusChange?.();
+    } else {
+      setActionError(result.error);
     }
   }, [isFinishingAll, order.order_id, onStatusChange]);
 
@@ -308,8 +324,10 @@ const OrderTicketCard = React.memo(function OrderTicketCard({
           <div className="divide-y divide-gray-100">
             {activeDishes.map((dish) => {
               const isServed = dish.status === 'served';
+              const isCooking = dish.status === 'cooking';
               const isCancelled = dish.status === 'cancelled';
               const isSavingThisDish = savingItemIds.has(dish.id);
+              const canTap = !isServed && !isCancelled && !isSavingThisDish;
               const stationLabel = STATION_DISPLAY[dish.station] ?? dish.station;
 
               return (
@@ -324,22 +342,30 @@ const OrderTicketCard = React.memo(function OrderTicketCard({
                 >
                   {/* ─── กล่องติ๊กถูก ─────────────────────────────────── */}
                   <button
-                    onClick={() => !isCancelled && !isSavingThisDish && handleDishTap(dish)}
-                    disabled={isCancelled || isSavingThisDish}
+                    onClick={() => canTap && handleDishTap(dish)}
+                    disabled={!canTap}
                     className={cn(
                       'w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-all border-2',
-                      isServed
-                        ? 'bg-emerald-600 border-emerald-600 text-white'
-                        : 'border-gray-300 bg-white hover:border-[#7F1D1D] hover:bg-red-50',
+                      isServed && 'bg-emerald-600 border-emerald-600 text-white cursor-default',
+                      isCooking && 'bg-orange-500 border-orange-500 text-white hover:bg-orange-600',
+                      dish.status === 'pending' && 'border-gray-300 bg-white hover:border-[#7F1D1D] hover:bg-red-50',
                       isCancelled && 'border-gray-200 bg-gray-100 cursor-not-allowed',
                       isSavingThisDish && 'opacity-60 cursor-wait'
                     )}
-                    title={isServed ? 'แตะซ้ำเพื่อย้อนกลับเป็นรอทำ' : 'แตะเพื่อเปลี่ยนเป็นเสร็จทันที'}
+                    title={
+                      dish.status === 'pending'
+                        ? 'แตะเพื่อเริ่มทำ (ตัดสต็อก)'
+                        : isCooking
+                          ? 'แตะเมื่อเสิร์ฟแล้ว'
+                          : undefined
+                    }
                   >
                     {isSavingThisDish ? (
                       <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
                     ) : isServed ? (
                       <Check size={18} strokeWidth={2.5} />
+                    ) : isCooking ? (
+                      <Flame size={16} />
                     ) : isCancelled ? (
                       <X size={14} className="text-gray-400" />
                     ) : null}
@@ -356,10 +382,20 @@ const OrderTicketCard = React.memo(function OrderTicketCard({
                       {dish.menu_item_name}
                     </span>
 
-                    {/* สถานะย้อนกลับ */}
+                    {/* ป้ายสถานะ */}
+                    {dish.status === 'pending' && (
+                      <span className="text-xs text-gray-400 font-medium block mt-0.5">
+                        รอทำ — แตะเพื่อเริ่มทำ
+                      </span>
+                    )}
+                    {isCooking && (
+                      <span className="text-xs text-orange-600 font-semibold block mt-0.5">
+                        กำลังทำ — แตะเมื่อเสิร์ฟ
+                      </span>
+                    )}
                     {isServed && (
-                      <span className="text-xs text-emerald-600 font-medium flex items-center gap-1 mt-0.5">
-                        <RotateCcw size={10} /> แตะซ้ำเพื่อย้อนกลับ
+                      <span className="text-xs text-emerald-600 font-medium block mt-0.5">
+                        เสิร์ฟแล้ว
                       </span>
                     )}
 
@@ -407,6 +443,23 @@ const OrderTicketCard = React.memo(function OrderTicketCard({
           </div>
         )}
 
+        {/* ─── ข้อความ error (เช่น วัตถุดิบไม่พอ) ─────────────────────────── */}
+        {actionError && (
+          <div className="px-4 py-2.5 bg-red-50 border-t border-red-200 flex items-start justify-between gap-2">
+            <span className="text-xs text-red-700 font-semibold flex items-start gap-1.5">
+              <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" />
+              {actionError}
+            </span>
+            <button
+              onClick={() => setActionError(null)}
+              className="text-red-400 hover:text-red-700 flex-shrink-0"
+              title="ปิด"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
         {/* ─── ปุ่มด้านล่างการ์ด ─────────────────────────────────────────── */}
         {isExpanded && hasRemainingDishes && (
           <div className="p-3 bg-gray-50 border-t border-gray-100 flex gap-2">
@@ -417,24 +470,8 @@ const OrderTicketCard = React.memo(function OrderTicketCard({
               className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 active:scale-[0.99] disabled:opacity-50 transition-all shadow-sm"
             >
               <CheckCheck size={16} />
-              <span>{isFinishingAll ? 'กำลังอัปเดต...' : '✓ เสิร์ฟแล้ว (Bump)'}</span>
+              <span>{isFinishingAll ? 'กำลังอัปเดต...' : 'ทำเสร็จทั้งหมดในบิลนี้'}</span>
             </button>
-          </div>
-        )}
-
-        {/* ─── ลิงก์เล็กด้านล่าง ─────────────────────────────────────────── */}
-        {isExpanded && (
-          <div className="px-4 py-2 flex gap-4 bg-gray-50 border-t border-gray-100">
-            <button
-              onClick={() => setDishToCancel({ itemId: order.order_id, itemName: 'ทั้งออเดอร์' })}
-              className="text-xs text-gray-400 hover:text-red-600 transition-colors"
-            >
-              แก้ไข / แจ้งของหมด
-            </button>
-            <span className="text-gray-200">|</span>
-            <span className="text-xs text-gray-400">
-              พิมพ์ใบครัวซ้ำ
-            </span>
           </div>
         )}
       </div>

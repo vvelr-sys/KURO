@@ -9,9 +9,7 @@ import {
   Bell,
   Volume2,
   VolumeX,
-  RotateCcw,
   AlertCircle,
-  TrendingUp,
 } from "lucide-react";
 import {
   StationFilter,
@@ -20,11 +18,7 @@ import {
 } from "@/components/kitchen";
 import { useKitchenRealtime } from "@/hooks/useKitchenRealtime";
 import { useAudioAlert } from "@/hooks/useAudioAlert";
-import {
-  getKitchenOrders,
-  getRecentlyServedOrders,
-  recallOrderItem,
-} from "./actions";
+import { getKitchenOrders } from "./actions";
 import { cn } from "@/lib/utils";
 
 /**
@@ -40,7 +34,6 @@ export default function KDSPage() {
 
   // ข้อมูลออเดอร์
   const [orders, setOrders] = useState([]);
-  const [recentlyServed, setRecentlyServed] = useState([]);
   const [errorMessage, setErrorMessage] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -69,18 +62,13 @@ export default function KDSPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // ฟังก์ชันโหลดข้อมูลออเดอร์และรายการ Recall
+  // ฟังก์ชันโหลดข้อมูลออเดอร์
   const loadOrders = useCallback(
     async (isManual = false) => {
       if (isManual) setIsRefreshing(true);
       try {
-        const [ordersRes, recallRes] = await Promise.all([
-          getKitchenOrders(selectedStation),
-          getRecentlyServedOrders(6),
-        ]);
-
+        const ordersRes = await getKitchenOrders(selectedStation);
         setOrders(ordersRes.orders || []);
-        setRecentlyServed(recallRes.items || []);
         setErrorMessage(ordersRes.error);
       } catch {
         setErrorMessage("เกิดข้อผิดพลาดในการโหลดข้อมูลออเดอร์");
@@ -96,13 +84,9 @@ export default function KDSPage() {
   useEffect(() => {
     let isCurrent = true;
 
-    Promise.all([
-      getKitchenOrders(selectedStation),
-      getRecentlyServedOrders(6),
-    ]).then(([ordersRes, recallRes]) => {
+    getKitchenOrders(selectedStation).then((ordersRes) => {
       if (!isCurrent) return;
       setOrders(ordersRes.orders || []);
-      setRecentlyServed(recallRes.items || []);
       setErrorMessage(ordersRes.error);
       setIsLoading(false);
     });
@@ -115,25 +99,17 @@ export default function KDSPage() {
   // ดักฟัง Supabase Realtime
   useKitchenRealtime({
     station: selectedStation,
-    onNewOrder: (payload) => {
+    onNewOrder: () => {
       playAlert();
       setNewOrderAlert({
         id: Date.now(),
-        message: `มีออเดอร์ใหม่เพิ่งส่งเข้ามาจากแท็บเล็ตลูกค้า!`,
+        message: `มีออเดอร์ใหม่ส่งเข้ามาจาก QR โต๊ะลูกค้า!`,
       });
       loadOrders(false);
     },
     onOrderChange: () => loadOrders(false),
     onMenuChange: () => loadOrders(false),
   });
-
-  // ฟังก์ชันเรียกคืนรายการที่เพิ่งเสิร์ฟ (Recall)
-  const handleRecall = async (itemId) => {
-    const res = await recallOrderItem(itemId);
-    if (res.success) {
-      loadOrders(false);
-    }
-  };
 
   // ─── คำนวณสรุปสถิติด้านบน (Stats Bar) ──────────────────────────
   const stats = useMemo(() => {
@@ -195,7 +171,7 @@ export default function KDSPage() {
                   ● ออนไลน์
                 </span>
               </div>
-              <p className="text-xs text-red-200">สาขาสยามสแควร์วัน ชั้น 4</p>
+              <p className="text-xs text-red-200">ครัว — Kitchen Display System</p>
             </div>
           </div>
 
@@ -292,7 +268,7 @@ export default function KDSPage() {
 
       {/* ═══ 3. แถบสรุปสถิติ (Stats Bar) ═══ */}
       <section className="max-w-7xl mx-auto px-4 pt-4 w-full">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           {/* การ์ด 1: รอทำทั้งหมด */}
           <div className="bg-white border border-gray-200 rounded-2xl p-3.5 shadow-sm">
             <span className="text-xs text-gray-500 font-medium block">
@@ -353,17 +329,6 @@ export default function KDSPage() {
               >
                 {stats.overdueCount > 0 ? "เร่งด่วน!" : "รายการ"}
               </span>
-            </div>
-          </div>
-
-          {/* การ์ด 4: เวลาเฉลี่ย */}
-          <div className="bg-white border border-gray-200 rounded-2xl p-3.5 shadow-sm">
-            <span className="text-xs text-gray-500 font-medium block">
-              เวลาเฉลี่ยสถานีนี้
-            </span>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-black text-gray-800">4.2</span>
-              <span className="text-xs text-gray-400">นาที / บิล</span>
             </div>
           </div>
         </div>
@@ -431,105 +396,22 @@ export default function KDSPage() {
           </div>
         )}
 
-        {/* ═══ โครงสร้าง 2 คอลัมน์: การ์ดออเดอร์ + พาเนล Recall ═══ */}
+        {/* ═══ รายการออเดอร์ ═══ */}
         {!isLoading && !errorMessage && orders.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-start">
-            {/* คอลัมน์ซ้าย (3 ส่วน): รายการออเดอร์ */}
-            <div className="lg:col-span-3">
-              {viewMode === "ticket" ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {orders.map((order) => (
-                    <OrderTicketCard
-                      key={order.order_id}
-                      order={order}
-                      nowTimestamp={nowTimestamp}
-                      onStatusChange={() => loadOrders(false)}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <ConsolidatedPrepList orders={orders} />
-              )}
+          viewMode === "ticket" ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {orders.map((order) => (
+                <OrderTicketCard
+                  key={order.order_id}
+                  order={order}
+                  nowTimestamp={nowTimestamp}
+                  onStatusChange={() => loadOrders(false)}
+                />
+              ))}
             </div>
-
-            {/* คอลัมน์ขวา (1 ส่วน): พาเนล Recall ออเดอร์ที่เพิ่งเสิร์ฟ */}
-            <div className="lg:col-span-1 bg-white rounded-2xl border border-gray-200 p-4 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-gray-900">
-                    ออเดอร์ที่เพิ่งเสิร์ฟล่าสุด (Recall)
-                  </span>
-                </div>
-                <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
-                  {recentlyServed.length} รายการ
-                </span>
-              </div>
-
-              <p className="text-[11px] text-gray-400 leading-relaxed">
-                หากกดเสิร์ฟผิดพลาด สามารถกดปุ่ม &quot;เรียกคืน&quot; เพื่อนำออเดอร์กลับเข้าหน้าจอได้ทันที
-              </p>
-
-              {/* รายการ Recall */}
-              <div className="space-y-2.5">
-                {recentlyServed.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-4">
-                    ยังไม่มีรายการที่เสิร์ฟในรอบนี้
-                  </p>
-                ) : (
-                  recentlyServed.map((item) => (
-                    <div
-                      key={item.id}
-                      className="p-2.5 rounded-xl border border-gray-100 bg-gray-50/60 hover:bg-gray-50 transition-colors flex items-center justify-between gap-2"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-bold bg-emerald-600 text-white px-1.5 py-0.2 rounded">
-                            เสิร์ฟแล้ว
-                          </span>
-                          <span className="text-xs font-bold text-gray-800 truncate">
-                            โต๊ะ {item.table_number}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-600 font-medium truncate mt-0.5">
-                          {item.menu_name} x{item.quantity}
-                        </p>
-                      </div>
-
-                      <button
-                        onClick={() => handleRecall(item.id)}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-700 text-[11px] font-bold hover:bg-red-50 hover:border-red-200 hover:text-red-700 transition-colors flex-shrink-0 shadow-2xs"
-                        title="เรียกคืนรายการนี้กลับเข้าจอ"
-                      >
-                        <RotateCcw size={11} />
-                        <span>เรียกคืน</span>
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* ประสิทธิภาพการออกอาหารวันนี้ */}
-              <div className="border-t border-gray-100 pt-3">
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-gray-500 font-medium flex items-center gap-1">
-                    <TrendingUp size={12} className="text-emerald-500" />
-                    ประสิทธิภาพวันนี้
-                  </span>
-                  <span className="font-bold text-emerald-600">96.4%</span>
-                </div>
-                <div className="w-full bg-gray-100 rounded-full h-1.5">
-                  <div
-                    className="bg-emerald-500 h-1.5 rounded-full"
-                    style={{ width: "96.4%" }}
-                  />
-                </div>
-                <div className="flex justify-between text-[10px] text-gray-400 mt-1.5">
-                  <span>เสิร์ฟสำเร็จ 142 บิล</span>
-                  <span className="text-red-400">เกินเวลา 4 บิล</span>
-                </div>
-              </div>
-            </div>
-          </div>
+          ) : (
+            <ConsolidatedPrepList orders={orders} />
+          )
         )}
       </main>
     </div>

@@ -3,24 +3,31 @@
 ---
 
 # KURO POS — Audit Matrix & Security Controls
-> **เมทริกซ์การตรวจสอบย้อนหลัง (Audit Trail) และการควบคุมสิทธิ์ความปลอดภัย**  
-> **โมเดลธุรกิจ:** ร้านบุฟเฟต์ชาบู (สุกี้ตี๋น้อย Model) | **Version:** 1.8 | **Date:** 12 พฤศจิกายน 2026
+
+**เมทริกซ์การตรวจสอบย้อนหลัง (Audit Trail) และการควบคุมสิทธิ์ความปลอดภัย**
+
+| โมเดลธุรกิจ | Version | Date |
+|---|:---:|:---:|
+| ร้านบุฟเฟต์ชาบู (สุกี้ตี๋น้อย Model) | 1.8 | 12 พฤศจิกายน 2026 |
 
 ---
 
-## สารบัญส่วนต่างๆ (Document Sections)
-1. [ส่วนที่ 1: ตารางบันทึก Audit Trail (Audit Event Matrix)](#ส่วนที่-1--ตารางบันทึก-audit-trail)
-2. [ส่วนที่ 2: เมทริกซ์สิทธิ์การเข้าถึงข้อมูล (Supabase RLS Matrix)](#ส่วนที่-2--เมทริกซ์สิทธิ์การเข้าถึงข้อมูล)
-3. [ส่วนที่ 3: กฎความถูกต้องของข้อมูลและ Triggers (Data Integrity Matrix)](#ส่วนที่-3--กฎความถูกต้องของข้อมูลและ-triggers)
-4. [ส่วนที่ 4: สรุปการปรับปรุงตามข้อกำหนด UX/UI v1.8 (UX/UI Alignment)](#ส่วนที่-4--สรุปการปรับปรุงตามข้อกำหนด-uxui-v18)
+## สารบัญ
+
+| ส่วน | หัวข้อ | ขอบเขต |
+|:---:|---|---|
+| 1 | [ตารางบันทึก Audit Trail](#ส่วนที่-1--ตารางบันทึก-audit-trail) | Audit Event Matrix |
+| 2 | [เมทริกซ์สิทธิ์การเข้าถึงข้อมูล](#ส่วนที่-2--เมทริกซ์สิทธิ์การเข้าถึงข้อมูล) | Supabase RLS Matrix |
+| 3 | [กฎความถูกต้องของข้อมูลและ Triggers](#ส่วนที่-3--กฎความถูกต้องของข้อมูลและ-triggers) | Data Integrity Matrix |
+| 4 | [สรุปการปรับปรุงตามข้อกำหนด UX/UI v1.8](#ส่วนที่-4--สรุปการปรับปรุงตามข้อกำหนด-uxui-v18) | UX/UI Alignment |
 
 ---
 
 ## ส่วนที่ 1 — ตารางบันทึก Audit Trail
 
-ทุกธุรกรรมสำคัญต้องบันทึกประวัติลงตาราง `audit_logs` เพื่อให้ตรวจสอบย้อนหลังได้ (NFR-005, NFR-022):
+ทุกธุรกรรมสำคัญต้องบันทึกประวัติลงตาราง `audit_logs` เพื่อให้ตรวจสอบย้อนหลังได้ (NFR-005, NFR-022)
 
-| เหตุการณ์ (Event) | Action Name | ผู้กระทำ (Actor) | ตารางเป้าหมาย (Target) | บังคับระบุเหตุผล (Reason) | ข้อมูลใน Payload |
+| เหตุการณ์ (Event) | Action Name | ผู้กระทำ (Actor) | ตารางเป้าหมาย | บังคับเหตุผล | ข้อมูลใน Payload |
 |---|---|---|---|:---:|---|
 | **เปิดโต๊ะ/รอบบริการ** | `OPEN_SESSION` | Cashier / Manager / Admin | `sessions` | ไม่ | Snapshot จำนวนลูกค้า, ราคาต่อหัว, เวลาเริ่ม |
 | **ย้ายโต๊ะ** | `TRANSFER_TABLE` | Cashier / Staff | `session_tables` | ใช่ | โต๊ะต้นทาง, โต๊ะปลายทาง, รอบบริการ |
@@ -35,9 +42,9 @@
 
 ---
 
-## ส่วนที่ 2 — เมทริกซ์สิทธิ์การเข้าถึงข้อมูล (Supabase RLS Matrix ฉบับปรับปรุง)
+## ส่วนที่ 2 — เมทริกซ์สิทธิ์การเข้าถึงข้อมูล
 
-> ร่างตามมติการตัดสินใจสถาปัตยกรรม v1.8 (18 พฤศจิกายน 2026) เพื่อควบคุมความปลอดภัยผ่าน Supabase RLS และ Route Protection:
+> Supabase RLS Matrix ฉบับปรับปรุง — ร่างตามมติการตัดสินใจสถาปัตยกรรม v1.8 (18 พฤศจิกายน 2026) เพื่อควบคุมความปลอดภัยผ่าน Supabase RLS และ Route Protection
 
 | ลำดับ | ฟังก์ชัน | ตำแหน่งที่เข้าถึงได้ | หมายเหตุ |
 |:---:|---|---|---|
@@ -60,24 +67,25 @@
 | 17 | **ดูรายงานยอดขาย** | `Manager`, `Admin` | |
 | 18 | **ดู Audit Log** | `Admin` (เต็มสิทธิ์), `Manager` (ตามสิทธิ์) | |
 
-> **หมายเหตุสำหรับลูกค้า:** ลูกค้า (ไม่ต้องล็อกอิน) ดูคิวตัวเอง ดูสถานะอาหารของโต๊ะตัวเอง และเรียกพนักงานได้เท่านั้น
+> [!NOTE]
+> **สำหรับลูกค้า:** ลูกค้า (ไม่ต้องล็อกอิน) ดูคิวตัวเอง ดูสถานะอาหารของโต๊ะตัวเอง และเรียกพนักงานได้เท่านั้น
 
 ---
 
 ## ส่วนที่ 3 — กฎความถูกต้องของข้อมูลและ Triggers
 
-ระบบควบคุมความถูกต้องของข้อมูลระดับลึกผ่าน PostgreSQL Triggers และ Constraints:
+ระบบควบคุมความถูกต้องของข้อมูลระดับลึกผ่าน PostgreSQL Triggers และ Constraints
 
-| กลไกความปลอดภัย (Constraint / Trigger) | ตารางที่บังคับใช้ | วัตถุประสงค์และการป้องกัน |
+| กลไก (Constraint / Trigger) | ตารางที่บังคับใช้ | วัตถุประสงค์และการป้องกัน |
 |---|---|---|
 | `fn_protect_session_snapshot` | `sessions` | ล็อก Snapshot จำนวนลูกค้าและราคาต่อหัวทันทีเมื่อ Session เปลี่ยนเป็น `active` ห้ามแก้ไขย้อนหลังโดยเด็ดขาด |
 | `fn_calc_bill_vat` | `bills` | คำนวณ VAT 7% ถอดใน (`ROUND(total_amount * 7.0 / 107.0, 2)`) อัตโนมัติทุกครั้งที่ยอดเงินเปลี่ยน (ไม่มี Service Charge) |
 | `fn_revoke_qr_on_session_close` | `qr_access_tokens` | เพิกถอน Token (`is_revoked = true`) ทันทีเมื่อ Session เปลี่ยนสถานะเป็น `closed` เท่านั้น |
 | `unique_order_item_consumption` | `stock_movements` | Partial Unique Index ป้องกันการตัดสต็อกซ้ำซ้อนสำหรับจานอาหารเดียวกัน (Idempotency) |
 | `unique_active_session_per_table` | `session_tables` | รับประกันว่า 1 โต๊ะจะมีรอบบริการที่ Active ได้ไม่เกิน 1 รอบในเวลาเดียวกัน |
-| `session_tables (Merge Support)` | `session_tables` | รองรับการรวมโต๊ะ (Merge Tables) โดย 1 รอบบริการสามารถมีหลายโต๊ะที่ Active ได้พร้อมกัน |
+| `session_tables` (Merge Support) | `session_tables` | รองรับการรวมโต๊ะ (Merge Tables) โดย 1 รอบบริการสามารถมีหลายโต๊ะที่ Active ได้พร้อมกัน |
 | `bills.session_id UNIQUE` | `bills` | รับประกันหลักการ 1 รอบบริการ มีได้เพียง 1 บิลเดี่ยวเท่านั้น (One Bill Principle) |
-| `payments (Split Payment)` | `payments` | ปลด UNIQUE บน `bill_id` เพื่อรองรับการชำระเงินหลายรายการต่อ 1 บิล โดยมี Trigger ตรวจสอบ `SUM(amount_paid) = bills.total_amount` |
+| `payments` (Split Payment) | `payments` | ปลด UNIQUE บน `bill_id` เพื่อรองรับการชำระเงินหลายรายการต่อ 1 บิล โดยมี Trigger ตรวจสอบ `SUM(amount_paid) = bills.total_amount` |
 | `profiles.pin_hash` | `profiles` | เข้ารหัส Staff PIN ด้วย bcrypt เพื่อความปลอดภัยสูงสุดในการล็อกอินหน้าร้าน |
 
 ---
@@ -88,7 +96,7 @@
 |---|---|---|---|
 | **โมเดลธุรกิจ** | บุฟเฟต์ปิ้งย่างทั่วไป | บุฟเฟต์ชาบู ราคาเดียวต่อหัว รูปแบบเดียวกับสุกี้ตี๋น้อย | `README.md`, `AGENTS.md`, `SRS.md` |
 | **PIN ฝั่งลูกค้า** | สแกน QR แล้วต้องกรอก PIN 6 หลัก | **ตัดระบบ PIN ฝั่งลูกค้าออก 100%** (สแกนแล้วสั่งได้ทันที) | `SRS.md`, `AGENTS.md`, `data_dictionary.md` |
-| **สถานะอาหาร** | 6 สถานะ (submitted $\rightarrow$ accepted $\rightarrow$ cooking $\rightarrow$ ready $\rightarrow$ served) | **4 สถานะมาตรฐาน:** `pending` $\rightarrow$ `cooking` (ตัดสต็อก BOM) $\rightarrow$ `served` [หรือ `cancelled`] | `SRS.md`, `constants/index.js`, `AGENTS.md` |
+| **สถานะอาหาร** | 6 สถานะ (submitted → accepted → cooking → ready → served) | **4 สถานะมาตรฐาน:** `pending` → `cooking` (ตัดสต็อก BOM) → `served` (หรือ `cancelled`) | `SRS.md`, `constants/index.js`, `AGENTS.md` |
 | **สถานะโต๊ะ** | 3 สถานะ (available, occupied, cleaning) | **4 สถานะ:** `available`, `occupied`, `cleaning`, `disabled` (30 โต๊ะ) | `constants/index.js`, `SRS.md` |
 | **ระบบคิว** | ยังไม่มีระบุ | **ระบบคิวหน้าร้านครบวงจร:** Cashier ออกบัตรคิวที่เคาน์เตอร์ + QR ดูคิวผ่านมือถือ | `SRS.md`, `data_dictionary.md` (`queues`) |
 | **เรียกพนักงาน** | ไม่มีปุ่มด่วน | **ระบบเรียกพนักงานเรียลไทม์:** ปุ่มด่วน 5 แบบ + หน้าจอ Staff Realtime | `SRS.md`, `data_dictionary.md` (`service_requests`) |
