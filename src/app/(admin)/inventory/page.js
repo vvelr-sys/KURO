@@ -1,13 +1,47 @@
 import { Suspense } from 'react';
-import { ComingSoonPage, PageSkeleton } from '@/components/layout';
+import { InventoryWorkspace } from '@/components/stock';
+import { PageSkeleton } from '@/components/layout';
+import { requireRole } from '@/lib/auth';
+import {
+  emergencyAdjustStock,
+  getBomData,
+  getIngredients,
+  getPendingStockCounts,
+  getStockMovements,
+  getTodayStockSummary,
+  reviewStockCount,
+  saveIngredient,
+  saveMenuBom,
+} from './actions';
 
 export const metadata = { title: 'สต็อกวัตถุดิบ | KURO SHABU POS' };
 
-// หน้าชั่วคราว — แทนที่ทั้งไฟล์เมื่อเริ่มทำหน้าจริง (ต้องเรียก requireRole('/inventory') ในหน้าใหม่)
+// Server Action ทั้งหมดของหน้านี้ (ส่งให้ Client Component เรียกใช้)
+const INVENTORY_ACTIONS = {
+  getTodayStockSummary,
+  getPendingStockCounts,
+  reviewStockCount,
+  getIngredients,
+  saveIngredient,
+  getBomData,
+  saveMenuBom,
+  getStockMovements,
+  emergencyAdjustStock,
+};
+
+/**
+ * หน้า 4.4 สต็อก (manager, admin — admin อนุมัติ/ปรับฉุกเฉินได้เฉพาะ Emergency พร้อมเหตุผล)
+ * ภาพรวมวันนี้ · วัตถุดิบ (FR-030, FR-034) · สูตร BOM (FR-031) · ประวัติความเคลื่อนไหว (FR-033)
+ */
 export default function InventoryPage() {
   return (
     <Suspense fallback={<PageSkeleton />}>
-      <ComingSoonPage path="/inventory" title="สต็อกวัตถุดิบ" />
+      <InventoryContent />
     </Suspense>
   );
+}
+
+async function InventoryContent() {
+  const staff = await requireRole('/inventory');
+  return <InventoryWorkspace staffRole={staff.role} actions={INVENTORY_ACTIONS} />;
 }

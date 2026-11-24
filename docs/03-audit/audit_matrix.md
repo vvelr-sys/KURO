@@ -27,11 +27,13 @@
 | **รวมโต๊ะ (Merge)** | `MERGE_TABLES` | Cashier / Staff | `session_tables` | ใช่ | โต๊ะหลัก, โต๊ะที่นำมารวม |
 | **แยกโต๊ะ (Split)** | `SPLIT_TABLES` | Cashier / Staff | `session_tables` | ใช่ | โต๊ะที่แยกออก, รายการแยก |
 | **ยกเลิกออเดอร์** | `CANCEL_ORDER_ITEM` | Staff / Kitchen / Manager | `order_items` | **ใช่** | รายการ, จำนวน, สถานะขณะยกเลิก |
-| **Override ปิดเมนู** | `MANUAL_OFF_MENU` | Kitchen / Manager / Admin | `menu_items` | ใช่ | เมนูที่ปิด, เหตุผลของหมดจริง |
+| **Override ปิดเมนู** | `MANUAL_OFF_MENU` | Kitchen / Manager / Admin | `menu_items` | ใช่ | เมนูที่ปิด, เหตุผลของหมดจริง, สถานะก่อน/หลัง |
+| **ส่งผลนับสต็อก** | `SUBMIT_STOCK_COUNT` | Staff / Manager / Admin | `stock_counts` | ไม่ | รอบ (เช้า/เย็น), วันที่, จำนวนรายการ, จำนวนที่ต่างเกิน 10% |
+| **ปฏิเสธผลนับสต็อก** | `REJECT_STOCK_COUNT` | Manager (Admin Emergency) | `stock_counts` | **ใช่** | สถานะก่อน/หลัง, รอบการนับ |
 | **ให้ส่วนลด** | `APPROVE_DISCOUNT` | Cashier / Manager / Admin | `bills` | **ใช่** | ยอดเงินก่อนลด, จำนวนเงินส่วนลด, ยอดสุทธิ |
 | **ชั่งเนื้อสัตว์เหลือ** | `RECORD_LEFTOVER` | Staff | `leftover_records` | ไม่ | น้ำหนักเป็นกรัม, ค่าปรับที่คำนวณได้ |
-| **ปรับยอดสต็อก** | `ADJUST_STOCK_COUNT` | Manager (Admin Emergency) | `stock_counts` | **ใช่** | ยอดระบบ, ยอดนับจริง, ผลต่าง |
-| **Emergency Override** | `EMERGENCY_OVERRIDE` | Admin | Any | **ใช่** | เหตุจำเป็นที่ต้องทำแทน Manager |
+| **ปรับยอดสต็อก** (อนุมัติผลนับ) | `ADJUST_STOCK_COUNT` | Manager (Admin Emergency) | `stock_counts` | Admin **ใช่** | ยอดระบบ, ยอดนับจริง, ผลต่าง (ปรับยอดตามผลต่าง) |
+| **Emergency Override** | `EMERGENCY_OVERRIDE` | Admin | Any (เช่น `ingredients` ปรับยอดฉุกเฉิน, `stock_counts` อนุมัติแทน) | **ใช่** | เหตุจำเป็นที่ต้องทำแทน Manager, ยอดก่อน/หลัง |
 
 ---
 
@@ -56,9 +58,12 @@
 | 13 | **รับแจ้งเรียกพนักงาน** | `Staff`, `Manager`, `Admin` | |
 | 14 | **คิดเงิน / รับชำระ / ใบกำกับภาษี** | `Cashier`, `Manager`, `Admin` | |
 | 15 | **กรอกส่วนลด** | `Cashier`, `Manager`, `Admin` | ต้องระบุเหตุผลและบันทึก Audit |
-| 16 | **ตรวจนับสต็อกประจำวัน / อนุมัติปรับยอด** | `Manager` | Admin เฉพาะ Emergency พร้อมเหตุผล |
+| 16 | **ตรวจนับสต็อกเช้า-เย็น / รับของเข้า / ของเสีย** | `Staff`, `Manager`, `Admin` | ผ่านฟังก์ชัน SECURITY DEFINER เท่านั้น — Staff ไม่เห็นยอดในระบบ (migration 022) |
+| 16.1 | **อนุมัติ / ปฏิเสธผลนับและปรับยอด** | `Manager` | Admin เฉพาะ Emergency พร้อมเหตุผล |
+| 16.2 | **อ่านรอบบริการ / การผูกโต๊ะ (หาเลขโต๊ะบนจอครัว)** | `Kitchen` (อ่านอย่างเดียว) | migration 023 |
 | 17 | **ดูรายงานยอดขาย** | `Manager`, `Admin` | |
-| 18 | **ดู Audit Log** | `Admin` (เต็มสิทธิ์), `Manager` (ตามสิทธิ์) | |
+| 18 | **ดู Audit Log** | `Admin` (เต็มสิทธิ์), `Manager` (ตามสิทธิ์) | Manager ไม่เห็นรายการที่ Admin เป็นผู้ทำ (RLS migration 024) |
+| 19 | **แก้สูตร BOM / เพิ่ม-แก้วัตถุดิบ** | `Manager`, `Admin` | ยอดคงเหลือแก้ตรงไม่ได้ (migration 024) |
 
 > **หมายเหตุสำหรับลูกค้า:** ลูกค้า (ไม่ต้องล็อกอิน) ดูคิวตัวเอง ดูสถานะอาหารของโต๊ะตัวเอง และเรียกพนักงานได้เท่านั้น
 
@@ -77,6 +82,9 @@
 | `unique_active_session_per_table` | `session_tables` | รับประกันว่า 1 โต๊ะจะมีรอบบริการที่ Active ได้ไม่เกิน 1 รอบในเวลาเดียวกัน |
 | `session_tables (Merge Support)` | `session_tables` | รองรับการรวมโต๊ะ (Merge Tables) โดย 1 รอบบริการสามารถมีหลายโต๊ะที่ Active ได้พร้อมกัน |
 | `bills.session_id UNIQUE` | `bills` | รับประกันหลักการ 1 รอบบริการ มีได้เพียง 1 บิลเดี่ยวเท่านั้น (One Bill Principle) |
+| `fn_return_stock_on_cancel` | `order_items` → `ingredients`, `stock_movements` | ยกเลิกรายการ `cooking` → คืนสต็อกตามยอดที่ตัดจริง (`cancel_return`) ต้องรู้ผู้ทำรายการเสมอ (migration 020 + 021) |
+| `trg_ingredient_stock_menu_availability` / `trg_bom_menu_availability` | `ingredients`, `menu_ingredients` → `menu_items` | FR-024: วัตถุดิบไม่พอทำ 1 จาน → `out_of_stock` · เติมครบ → `available` (ไม่แตะ `manual_off`) |
+| `idx_unique_stock_count_round` | `stock_counts` | 1 วันมีผลนับรอบเช้าและรอบเย็นได้อย่างละ 1 ครั้ง (ยกเว้นรอบที่ถูกปฏิเสธ นับใหม่ได้) |
 | `payments (Split Payment)` | `payments` | ปลด UNIQUE บน `bill_id` เพื่อรองรับการชำระเงินหลายรายการต่อ 1 บิล โดยมี Trigger ตรวจสอบ `SUM(amount_paid) = bills.total_amount` |
 | `profiles.pin_hash` | `profiles` | เข้ารหัส Staff PIN ด้วย bcrypt เพื่อความปลอดภัยสูงสุดในการล็อกอินหน้าร้าน |
 

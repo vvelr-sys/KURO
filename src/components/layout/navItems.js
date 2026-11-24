@@ -4,6 +4,7 @@ import {
   Boxes,
   ChartColumn,
   ChefHat,
+  ClipboardCheck,
   History,
   Receipt,
   Settings,
@@ -26,6 +27,7 @@ export const NAV_ITEMS = [
   { path: '/queues', label: 'คิว', icon: UserPlus },
   { path: '/billing', label: 'คิดเงิน', icon: Receipt },
   { path: '/service-requests', label: 'เรียกพนักงาน', icon: BellRing },
+  { path: '/stock-count', label: 'นับสต็อก', icon: ClipboardCheck },
   // ครัว
   { path: '/kds', label: 'จอครัว', icon: ChefHat },
   { path: '/stock-override', label: 'เปิด/ปิดเมนู', icon: ToggleRight },

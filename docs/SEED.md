@@ -20,6 +20,11 @@
 | [`supabase/migrations/006_queue_functions.sql`](../supabase/migrations/006_queue_functions.sql) | ฟังก์ชันคิว: ออกบัตรคิว (เลขคิว A/B/C + 3 หลัก เริ่ม 001 ทุกวัน กันเลขซ้ำ), เรียก/เรียกซ้ำ/ข้าม/ยกเลิก | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
 | [`supabase/migrations/007_billing_functions.sql`](../supabase/migrations/007_billing_functions.sql) | ฟังก์ชันคิดเงิน: ออกบิล (เลข INV-YYYYMMDD-NNN), ส่วนลด + Audit Log, รับชำระ/แบ่งจ่าย แล้วปิดรอบ · `payments` เพิ่ม `reference_note`, `cash_tendered` · พนักงานอ่านข้อมูลร้านใน `app_settings` ได้ | ✅ รันซ้ำได้ ไม่แก้ข้อมูลเดิม |
 | [`supabase/migrations/008_settings_receipt_messages.sql`](../supabase/migrations/008_settings_receipt_messages.sql) | ให้พนักงานอ่านข้อความหัว/ท้ายใบเสร็จ (`receipt_header_message`, `receipt_footer_message`) | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
+| [`supabase/migrations/020_kitchen_cancel_return_and_audit.sql`](../supabase/migrations/020_kitchen_cancel_return_and_audit.sql) | ครัว: คืนสต็อกตอนยกเลิกรายการ `cooking` ตามยอดที่ตัดจริง + policy บันทึก audit_logs ในนามตัวเอง | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
+| [`supabase/migrations/021_fix_cancel_return_actor.sql`](../supabase/migrations/021_fix_cancel_return_actor.sql) | แก้ 020: ต้องรู้ผู้ยกเลิกเสมอ (ไม่ใช้ UUID 0000) + `SET search_path` | ✅ รันซ้ำได้ ต้องรันหลัง 020 |
+| [`supabase/migrations/022_staff_stock_counting.sql`](../supabase/migrations/022_staff_stock_counting.sql) | นับสต็อกเช้า-เย็นโดย Staff (ไม่เห็นยอด) + `stock_counts.count_round` + รับของเข้า/ของเสีย + Manager อนุมัติ/ปฏิเสธ + Realtime สต็อก | ✅ รันซ้ำได้ ไม่ลบข้อมูล (ผลนับเดิมถือเป็นรอบปิดร้าน) |
+| [`supabase/migrations/023_kitchen_read_sessions.sql`](../supabase/migrations/023_kitchen_read_sessions.sql) | ให้ `kitchen` อ่าน `sessions` / `session_tables` (จอครัวหาเลขโต๊ะ) | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
+| [`supabase/migrations/024_inventory_reports_audit.sql`](../supabase/migrations/024_inventory_reports_audit.sql) | FR-024 ปิด/เปิดเมนูอัตโนมัติตามสต็อก, Manager แก้สูตร BOM ได้, Admin ปรับยอดฉุกเฉิน (`fn_emergency_adjust_stock`), Manager ไม่เห็น Audit Log ของ Admin | ✅ รันซ้ำได้ (ปรับสถานะเมนูให้ตรงสต็อกทันทีที่รัน) |
 | [`supabase/seed_master.sql`](../supabase/seed_master.sql) | ข้อมูลหลัก: ตั้งค่า VAT/ค่าปรับ, แพ็กเกจ, โต๊ะ T01-T08, หมวด, วัตถุดิบ, เมนู, ตัวเลือก, BOM, อัตราใช้ต่อหัว | ✅ รันซ้ำ = รีเซ็ตข้อมูลหลักกลับค่าตั้งต้น (ยกเว้นสถานะโต๊ะ) |
 | [`supabase/seed_demo.sql`](../supabase/seed_demo.sql) | ล้างข้อมูลการใช้งาน แล้วใส่ข้อมูลจำลอง (คิว, 3 โต๊ะกำลังใช้งาน, ออเดอร์, บิล, ประวัติ 7 วัน ฯลฯ) | ✅ ทั้งไฟล์อยู่ใน Transaction เดียว ผิดพลาดตรงไหน ROLLBACK ทั้งหมด |
 
@@ -29,7 +34,7 @@
 
 | ลำดับ | ทำอะไร | ที่ไหน |
 |:---:|---|---|
-| 0 | `supabase/migrations/002_v18_fixes.sql` → `003_queue_guests_tax_invoice.sql` → `004_protect_profiles.sql` → `005_table_session_functions.sql` → `006_queue_functions.sql` → `007_billing_functions.sql` → `008_settings_receipt_messages.sql` (แก้ schema ครั้งเดียว หลัง `001_initial_schema.sql`) | SQL Editor |
+| 0 | `supabase/migrations/002_v18_fixes.sql` → `003_queue_guests_tax_invoice.sql` → `004_protect_profiles.sql` → `005_table_session_functions.sql` → `006_queue_functions.sql` → `007_billing_functions.sql` → `008_settings_receipt_messages.sql` → `020_kitchen_cancel_return_and_audit.sql` → `021_fix_cancel_return_actor.sql` → `022_staff_stock_counting.sql` → `023_kitchen_read_sessions.sql` → `024_inventory_reports_audit.sql` (แก้ schema ครั้งเดียว หลัง `001_initial_schema.sql`) | SQL Editor |
 | 1 | สร้างบัญชีทดสอบ 5 ตำแหน่ง — เลือก **วิธี A** หรือ **วิธี B** ด้านล่าง | Dashboard / Terminal |
 | 2 | `supabase/seed_master.sql` | SQL Editor |
 | 3 | `supabase/seed_demo.sql` (เฉพาะฐานข้อมูลพัฒนา/ทดสอบ) | SQL Editor |
@@ -123,6 +128,8 @@ union all select 'audit_logs', count(*) from audit_logs;
 - งานโต๊ะ/รอบบริการ **ต้องเรียกผ่านฟังก์ชัน** `supabase.rpc('fn_open_table' | 'fn_move_table' | 'fn_mark_table_cleaned' | 'fn_set_table_disabled' | 'fn_start_closing' | 'fn_record_leftover' | 'fn_issue_qr_token', …)` ห้ามแก้ตาราง `sessions` / `session_tables` / `dining_tables` ตรงๆ — ฟังก์ชันตรวจตำแหน่งและทำทุกขั้นใน Transaction เดียว (error เป็นภาษาไทย แสดงบนหน้าจอได้เลย)
 - บันทึก `audit_logs` ได้เฉพาะในนามตัวเอง (`actor_id` = ผู้ล็อกอิน) และ **ห้ามต่อ `.select()`** หลัง insert (พนักงานทั่วไปอ่าน log ไม่ได้ จะ error)
 - งานคิวเรียกผ่าน `supabase.rpc('fn_issue_queue' | 'fn_update_queue_status', …)` — เลขคิวสร้างในฐานข้อมูล ห้าม insert ตาราง `queues` เอง
+- งานสต็อกของ Staff เรียกผ่าน `supabase.rpc('fn_ingredients_for_count' | 'fn_today_stock_count_rounds' | 'fn_submit_stock_count' | 'fn_record_stock_movement', …)` และ Manager อนุมัติผ่าน `fn_review_stock_count` — **ห้ามให้หน้า Staff อ่าน `ingredients.current_stock` / `stock_count_items.system_stock`** (นับแบบไม่เห็นยอด)
+- ยกเลิกรายการอาหาร: แค่อัปเดต `order_items.status = 'cancelled'` พร้อม `cancelled_by`, `cancelled_reason` — Trigger คืนสต็อกให้เอง ห้ามแก้ `ingredients` / `stock_movements` ใน Server Action
 - คิดเงินเรียกผ่าน `supabase.rpc('fn_create_bill' | 'fn_apply_discount' | 'fn_pay_bill', …)` — ยอดเงินทั้งหมดคำนวณในฐานข้อมูล ห้าม insert/update `bills` `bill_items` `payments` เอง
 - ข้อมูลร้านบนใบเสร็จอยู่ใน `app_settings` คีย์ `store_name`, `store_branch`, `store_address`, `store_tax_id`, `store_phone` (seed เป็นค่าตัวอย่าง)
 - ออกใบกำกับภาษี **ไม่ต้องส่ง** `invoice_number` — Trigger สร้างเลข `TAX-YYYYMMDD-NNNN` ให้เอง (เริ่ม 0001 ใหม่ทุกวัน ตามเวลาไทย)
@@ -142,9 +149,9 @@ union all select 'audit_logs', count(*) from audit_logs;
 | อีเมล | ตำแหน่ง (`role`) | ชื่อ (`full_name`) | ใช้ทดสอบหน้า |
 |---|---|---|---|
 | `admin@kuro.test` | `admin` | สมชาย ใจดี (ผู้ดูแลระบบ) | ทุกหน้า โดยเฉพาะ `/packages`, `/staff`, `/settings`, `/audit-logs` |
-| `manager@kuro.test` | `manager` | สมหญิง รักร้าน (ผู้จัดการ) | `/menu`, `/inventory` (อนุมัติตรวจนับ), `/reports`, `/audit-logs` |
+| `manager@kuro.test` | `manager` | สมหญิง รักร้าน (ผู้จัดการ) | `/menu`, `/inventory` (อนุมัติผลนับ + สรุปสต็อก + กราฟ), `/reports`, `/audit-logs` |
 | `cashier@kuro.test` | `cashier` | มานี มีเงิน (แคชเชียร์) | `/queues`, `/tables`, `/billing`, `/billing/tax-invoice` |
-| `staff@kuro.test` | `staff` | มานะ ขยันดี (พนักงานบริการ) | `/tables`, `/service-requests` |
+| `staff@kuro.test` | `staff` | มานะ ขยันดี (พนักงานบริการ) | `/tables`, `/service-requests`, `/stock-count` (นับสต็อกเช้า-เย็น, รับของเข้า, ของเสีย) |
 | `kitchen@kuro.test` | `kitchen` | ชูใจ ทำอร่อย (ครัว) | `/kds`, `/stock-override` |
 
 ## 5. Token ทดสอบฝั่งลูกค้า (ไม่ต้องล็อกอิน)
