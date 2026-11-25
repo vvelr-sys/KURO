@@ -144,7 +144,8 @@ KURO/
         ├── 022_staff_stock_counting.sql             # นับสต็อกเช้า-เย็นโดย staff + รับของเข้า/ของเสีย + อนุมัติ
         ├── 023_kitchen_read_sessions.sql            # ให้ kitchen อ่าน sessions/session_tables (จอครัวหาเลขโต๊ะ)
         ├── 024_inventory_reports_audit.sql          # FR-024 ปิด/เปิดเมนูอัตโนมัติ, Manager แก้ BOM, Admin ปรับยอดฉุกเฉิน, สิทธิ์อ่าน Audit Log
-        └── 025_customer_ordering.sql                # หน้าสั่งอาหารลูกค้า: ฟังก์ชันรับ QR token + ปิด RLS ที่ให้ anon เขียน orders/order_items ตรง
+        ├── 025_customer_ordering.sql                # หน้าสั่งอาหารลูกค้า: ฟังก์ชันรับ QR token + ปิด RLS ที่ให้ anon เขียน orders/order_items ตรง
+        └── 026_customer_order_status.sql            # หน้าสถานะอาหารลูกค้า: fn_customer_get_orders (ดึงซ้ำทุก 10 วินาที แทน Realtime)
 ```
 
 ---
