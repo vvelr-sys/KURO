@@ -5,26 +5,12 @@ import { toggleMenuAvailability } from '@/app/(kitchen)/stock-override/actions';
 import { toDisplayError } from '@/lib/action-helpers';
 import { checkActionRole } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
-import { KITCHEN_STATION_LABELS, MENU_IMAGE_BUCKET, ROUTE_PERMISSIONS } from '@/lib/constants';
+import { KITCHEN_STATION_LABELS, ROUTE_PERMISSIONS } from '@/lib/constants';
+import { removeStoredImage, toStoragePath } from '@/lib/storage-image';
 
 // Server Action ของหน้าจัดการเมนู (manager, admin — RLS manager_manage_menu / manager_manage_categories ตรวจซ้ำ)
 const MENU_ROLES = ROUTE_PERMISSIONS['/menu'];
 const VALID_STATIONS = Object.keys(KITCHEN_STATION_LABELS);
-
-/** path ของไฟล์ใน bucket รูปเมนู จาก public URL (ไม่ใช่รูปใน bucket ของเรา → null) */
-function toStoragePath(imageUrl) {
-  const marker = `/storage/v1/object/public/${MENU_IMAGE_BUCKET}/`;
-  const index = imageUrl?.indexOf(marker) ?? -1;
-  return index >= 0 ? imageUrl.slice(index + marker.length) : null;
-}
-
-/** ลบรูปเก่าออกจาก Storage (ลบไม่สำเร็จไม่เป็นไร — ไม่กระทบเมนู) */
-async function removeOldImage(supabase, imageUrl) {
-  const path = toStoragePath(imageUrl);
-  if (!path) return;
-  const { error } = await supabase.storage.from(MENU_IMAGE_BUCKET).remove([path]);
-  if (error) console.error('[menu image remove]', error.message);
-}
 
 /**
  * เพิ่ม/แก้หมวดหมู่
@@ -107,7 +93,7 @@ export async function saveMenuItem(input) {
   if (error) return { error: toDisplayError(error, 'menu save'), fieldErrors: {} };
 
   // เปลี่ยน/ลบรูป → ลบไฟล์เก่าออกจาก Storage
-  if (before.image_url && before.image_url !== imageUrl) await removeOldImage(supabase, before.image_url);
+  if (before.image_url && before.image_url !== imageUrl) await removeStoredImage(supabase, before.image_url);
 
   refresh();
   return { error: null, fieldErrors: {} };
@@ -133,7 +119,7 @@ export async function deleteMenuItem({ id }) {
     return { error: toDisplayError(error, 'menu delete') };
   }
 
-  await removeOldImage(supabase, before.image_url);
+  await removeStoredImage(supabase, before.image_url);
   refresh();
   return { error: null };
 }

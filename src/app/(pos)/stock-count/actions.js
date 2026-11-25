@@ -13,7 +13,7 @@ const STOCK_COUNT_ROLES = ROUTE_PERMISSIONS['/stock-count'];
 
 /**
  * ดึงข้อมูลสำหรับหน้านับสต็อก: รายชื่อวัตถุดิบ (ไม่มียอดคงเหลือ) และสถานะรอบนับของวันนี้
- * @returns {Promise<{ ingredients: Array<{ id: string, name: string, unit: string }>, todayRounds: Array<{ count_round: string, status: string, counted_at: string }>, error: string|null }>}
+ * @returns {Promise<{ ingredients: Array<{ id: string, name: string, unit: string, image_url: string|null }>, todayRounds: Array<{ count_round: string, status: string, counted_at: string }>, error: string|null }>}
  */
 export async function getCountSheet() {
   const { error: roleError } = await checkActionRole(STOCK_COUNT_ROLES);

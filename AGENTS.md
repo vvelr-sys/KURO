@@ -118,10 +118,10 @@ KURO/
 │   │   ├── globals.css                # Tailwind CSS v4
 │   │   └── layout.js                  # Root Layout
 │   │
-│   ├── hooks/                         # Custom Hooks: useKitchenRealtime, useAudioAlert, useStockRealtime, useDebounce, useStoredToggle, useRealtimeRefresh
+│   ├── hooks/                         # Custom Hooks: useKitchenRealtime, useAudioAlert, useStockRealtime, useDebounce, useStoredToggle, useRealtimeRefresh, useImageUpload
 │   │
 │   ├── components/
-│   │   ├── ui/                        # Reusable UI: Button, Modal, AlertMessage, PrintPortal, MenuImage (รูปเมนู/ไอคอนแทนเมื่อไม่มีรูป)
+│   │   ├── ui/                        # Reusable UI: Button, Modal, AlertMessage, PrintPortal, MenuImage (รูปเมนู/วัตถุดิบ หรือไอคอนแทนเมื่อไม่มีรูป), ImagePickerField (ช่องอัปโหลดรูป)
 │   │   ├── customer/                  # Customer: MenuCard, OrderCart, Timer
 │   │   ├── pos/                       # POS: TableMap, QueueList, BillingForm
 │   │   ├── kitchen/                   # Kitchen: KdsScreen, StockOverrideScreen, OrderTicketCard, ConsolidatedPrepList, StationFilter, KitchenGuideModal, index.js
@@ -145,7 +145,10 @@ KURO/
         ├── 022_staff_stock_counting.sql             # นับสต็อกเช้า-เย็นโดย staff + รับของเข้า/ของเสีย + อนุมัติ
         ├── 023_kitchen_read_sessions.sql            # ให้ kitchen อ่าน sessions/session_tables (จอครัวหาเลขโต๊ะ)
         ├── 024_inventory_reports_audit.sql          # FR-024 ปิด/เปิดเมนูอัตโนมัติ, Manager แก้ BOM, Admin ปรับยอดฉุกเฉิน, สิทธิ์อ่าน Audit Log
-        └── 025_menu_packages_staff.sql              # T-10: จำกัดจำนวนต่อการสั่ง, Manager แก้หมวดหมู่, ที่เก็บรูปเมนู (Storage)
+        ├── 025_menu_packages_staff.sql              # T-10: จำกัดจำนวนต่อการสั่ง, Manager แก้หมวดหมู่, ที่เก็บรูปเมนู (Storage)
+        ├── 026_ingredient_images.sql                # รูปวัตถุดิบ (ingredients.image_url) + ใบนับสต็อกคืนรูปด้วย
+        ├── 027_staff_read_order_options.sql         # พนักงานอ่านตัวเลือกเมนู/ตัวเลือกที่ลูกค้าเลือกได้ (จอครัวแสดง เผ็ดน้อย ฯลฯ)
+        └── 028_fix_permissions_review.sql           # แก้สิทธิ์จากการตรวจระบบ: ครัวเปิด/ปิดเมนูผ่านฟังก์ชัน, ปิดช่องคนนอกเพิ่ม/อ่านออเดอร์, จำกัดช่องที่แก้ได้ใน order_items
 ```
 
 ---
@@ -250,7 +253,7 @@ draft → active → expired → closing → billed → closed
 | `/(pos)/billing` | **2.3 ชำระเงิน** | `cashier`, `manager`, `admin` *(staff ทำไม่ได้)* | สรุปยอด, เพิ่มรายการพิเศษ/ค่าปรับเนื้อเหลือ, กรอกส่วนลด (ระบุเหตุผล), เงินสด/PromptPay/บัตร/Split Payment |
 | `/(pos)/billing/tax-invoice` | **2.4 ใบกำกับภาษี** | `cashier`, `manager`, `admin` | พรีวิวใบเสร็จ, ฟอร์มข้อมูลนิติบุคคล/บุคคล, เลขผู้เสียภาษี 13 หลัก, พิมพ์/อีเมล |
 | `/(pos)/service-requests` | **2.5 แจ้งเตือน** | `staff`, `manager`, `admin` | รายการ Realtime (โต๊ะ+ประเภท+เวลารอ), เสียง/สี, ปุ่มรับเรื่อง/เสร็จ |
-| `/(pos)/stock-count` | **2.6 นับสต็อกเช้า-เย็น** | `staff`, `manager`, `admin` | เลือกรอบ (เปิดร้าน/ปิดร้าน), ใบนับทุกวัตถุดิบ **ไม่แสดงยอดในระบบ**, เตือนนับซ้ำรายการที่ต่างเกิน 10%, ส่งรอ Manager อนุมัติที่ `/inventory`, แท็บรับของเข้า / ของเสีย (ระบุเหตุผล) |
+| `/(pos)/stock-count` | **2.6 นับสต็อกเช้า-เย็น** | `staff`, `manager`, `admin` | เลือกรอบ (เปิดร้าน/ปิดร้าน), ใบนับทุกวัตถุดิบพร้อมรูป **ไม่แสดงยอดในระบบ**, เตือนนับซ้ำรายการที่ต่างเกิน 10%, ส่งรอ Manager อนุมัติที่ `/inventory`, แท็บรับของเข้า / ของเสีย (ระบุเหตุผล) |
 
 ### 4.3 ฝั่งครัว — KDS (ต้อง Auth: kitchen)
 
@@ -489,4 +492,10 @@ export const calcBuffetTotal = (session) =>
 | **รูปเมนู** (25 พ.ย. 2026) | อัปโหลดจากหน้า `/menu` เข้า Supabase Storage bucket `menu-images` (JPG/PNG/WEBP ≤ 2 MB) | ทุกคนดูรูปได้ (ลูกค้าไม่ล็อกอิน) · อัปโหลด/ลบเฉพาะ Manager/Admin · เปลี่ยน/ลบรูปแล้วลบไฟล์เก่าให้เอง · แสดงที่หน้าเมนู, เปิด/ปิดเมนู, จอครัว |
 | **หมวดหมู่เมนู** (25 พ.ย. 2026) | Manager เพิ่ม/แก้/เรียง/ปิดหมวดได้ (เดิมเฉพาะ Admin) | policy `manager_manage_categories` (migration 025) · ไม่มีปุ่มลบหมวด ใช้ปิดแทน |
 | **ราคาบุฟเฟต์** (25 พ.ย. 2026) | มีแพ็กเกจเปิดใช้งาน 1 ตัว หน้า `/packages` แก้ตัวนั้น (ไม่มีหน้าเลือกแพ็กเกจ) · ราคาเด็กต้องไม่เกินราคาผู้ใหญ่ | VAT เก็บใน `app_settings.vat_rate_percent` · Audit `UPDATE_PACKAGE` เฉพาะค่าที่เปลี่ยน |
+| **รูปวัตถุดิบ** (26 พ.ย. 2026) | อัปโหลดที่ `/inventory` แท็บวัตถุดิบ · แสดงในใบนับและแท็บรับของเข้า/ของเสียของ `/stock-count` (ช่วย staff หยิบนับถูกตัว) | `ingredients.image_url` (migration 026) ใช้ bucket `menu-images` โฟลเดอร์ `ingredients/` · `fn_ingredients_for_count` คืนรูปแต่ยังไม่คืนยอด (นับแบบไม่เห็นยอดเหมือนเดิม) · **ไม่มีรูป → ยืมรูปเมนูที่ใช้วัตถุดิบนี้** (สูตรสั้นสุดก่อน, คำนวณตอนอ่าน ไม่คัดลอกไฟล์) · ตารางวัตถุดิบแสดง "ใช้ในเมนู" และเตือน "ยังไม่อยู่ในเมนูไหน" (ขายแล้วไม่ตัดสต็อกตัวนั้น) |
+| **ตัวเลือกเมนูบนจอครัว** (26 พ.ย. 2026) | การ์ดออเดอร์แสดงตัวเลือกที่ลูกค้าเลือก (เช่น เผ็ดน้อย) เป็นป้ายสีเหลือง · "รวมรายการเตรียม" แยกยอดตามตัวเลือก (เช่น เผ็ดน้อย ×2) | migration 027: `order_item_options` / `menu_item_options` อ่านได้โดยพนักงานที่ล็อกอิน (เดิมไม่มี policy — ไม่มีใครอ่านได้) · ยังไม่มีหน้าจัดการตัวเลือก (เพิ่ม/แก้ผ่าน SQL) |
+| **เหตุผลปิดเมนูเก็บที่เมนู** (26 พ.ย. 2026) | ปิดเมนูด้วยมือ → บันทึก `menu_items.disabled_reason` ด้วย (นอกจาก Audit) · เปิดกลับ → ล้าง · แสดงบนการ์ดหน้า `/menu` และ `/stock-override` | ทำใน `toggleMenuAvailability` (ใช้ร่วมทั้ง 2 หน้า) |
+| **เปิด/ปิดเมนูผ่านฟังก์ชัน** (26 พ.ย. 2026) | ครัวเปิด/ปิดเมนูได้จริง (เดิม RLS ให้แก้ `menu_items` แค่ admin/manager → ครัวกดแล้วแก้ 0 แถวแต่ขึ้นว่าสำเร็จ + Audit ปลอม) | `fn_set_menu_availability` (migration 028, SECURITY DEFINER) แก้ได้แค่สถานะ + เหตุผล · บันทึก Audit ในฟังก์ชันเดียวกัน · ครัวยังแก้ชื่อ/ราคาเมนูไม่ได้ |
+| **ออเดอร์: ปิดช่องคนนอก** (26 พ.ย. 2026) | `orders` / `order_items` อ่านได้เฉพาะพนักงานที่ล็อกอิน · ลบสิทธิ์ INSERT ตรงของคนไม่ล็อกอิน (เดิม `WITH CHECK (true)` ใครก็ยิงออเดอร์ปลอมได้) · พนักงานแก้ `order_items` ได้เฉพาะ `status`, `cancelled_by`, `cancelled_reason`, `cancelled_at` | migration 028 · ลูกค้ายังสแกน QR สั่งได้เหมือนเดิม (ไม่ต้องล็อกอิน) — ที่ปิดคือ "ทางลัดที่ไม่ผ่าน QR" · **หน้าลูกค้า (T-05) ต้องตรวจ QR token ที่เซิร์ฟเวอร์ก่อนอ่าน/บันทึกออเดอร์ทุกครั้ง** (ขั้นตอนตาม SEED.md ข้อ 5) เลือกได้ 2 วิธี: (A) ฟังก์ชัน SQL แบบ SECURITY DEFINER ที่รับ token แล้วตรวจเอง (แนะนำ เหมือนฟังก์ชันเปิดโต๊ะ/ออกบิล) หรือ (B) Server Action ตรวจ token จาก cookie แล้วบันทึกด้วย `createAdminClient()` · ห้ามเปิด policy ให้ anon อ่าน/เพิ่มตรงกลับมา |
+| **ตารางที่สำรองไว้ ยังไม่ใช้ในเฟส 1** (26 พ.ย. 2026) | `usage_rates`, `head_usage_estimates` (ไม่มีระบบพยากรณ์) · `package_menu_items` (บุฟเฟต์ราคาเดียว ใช้ `extra_price` แยกเมนูสั่งเพิ่มแทน) · `payment_attempts` (ส่วนคิดเงิน) | มีโครงตารางและข้อมูลตัวอย่าง แต่ไม่มีหน้าจอ/ไม่มี FR — อย่าสร้างหน้าจอเองก่อนถามผู้ใช้ · ตัวเลือกเมนู (`menu_item_options`) ยังไม่มีหน้าจัดการ แก้ผ่าน SQL และราคาตัวเลือกยังไม่ถูกรวมในบิล (ทุกตัวเลือกตั้งราคา 0) |
 | **บัญชีพนักงาน** (25 พ.ย. 2026) | Admin สร้างบัญชีจากหน้าเว็บได้ · ปิดใช้งานแทนการลบ · Admin เปลี่ยนตำแหน่ง/ปิดบัญชีตัวเองไม่ได้ | ใช้ Service Role Key ฝั่งเซิร์ฟเวอร์เท่านั้น · ไม่มี key = ดูรายชื่อได้อย่างเดียว · Audit `CREATE_STAFF` / `UPDATE_STAFF` ไม่เก็บรหัสผ่าน/PIN · **ล็อกอินด้วย PIN ยังไม่ได้ทำ** (หน้า login รองรับแค่อีเมล) |

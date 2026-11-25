@@ -2,12 +2,13 @@
 
 import React, { useCallback, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Search, Send } from 'lucide-react';
+import { MenuImage } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useDebounce } from '@/hooks/useDebounce';
 import { STOCK_COUNT_ROUNDS, STOCK_COUNT_ROUND_LABELS } from '@/lib/constants';
 
 /**
- * แถววัตถุดิบ 1 รายการในใบนับ — แสดงแค่ชื่อและหน่วย (ไม่แสดงยอดในระบบ)
+ * แถววัตถุดิบ 1 รายการในใบนับ — แสดงรูป ชื่อ และหน่วย (ไม่แสดงยอดในระบบ)
  */
 const IngredientCountRow = React.memo(function IngredientCountRow({
   ingredient,
@@ -25,6 +26,7 @@ const IngredientCountRow = React.memo(function IngredientCountRow({
       )}
     >
       <div className="flex items-center gap-3">
+        <MenuImage src={ingredient.image_url} alt="" className="size-14 rounded-xl" />
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-ink truncate">{ingredient.name}</p>
           {needsRecount && (
@@ -70,7 +72,7 @@ const IngredientCountRow = React.memo(function IngredientCountRow({
  * ต้องนับครบทุกวัตถุดิบก่อนส่ง → รอผู้จัดการอนุมัติ
  *
  * @param {object} props
- * @param {Array<{ id: string, name: string, unit: string }>} props.ingredients
+ * @param {Array<{ id: string, name: string, unit: string, image_url?: string|null }>} props.ingredients
  * @param {Array<{ count_round: string, status: string }>} props.todayRounds - รอบที่ส่งไปแล้ววันนี้
  * @param {(round: string, items: Array, confirmRecount: boolean) => Promise<{ status: string|null, recountIds: string[], error: string|null }>} props.onSubmit
  */

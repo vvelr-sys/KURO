@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { toDisplayError } from '@/lib/action-helpers';
 import { checkActionRole } from '@/lib/auth';
 import { ROUTE_PERMISSIONS } from '@/lib/constants';
 
@@ -38,6 +39,9 @@ export async function getKitchenOrders(selectedStation = null) {
           kitchen_station,
           image_url
         ),
+        order_item_options (
+          menu_item_options ( option_group_name, option_name )
+        ),
         orders!inner (
           id,
           session_id,
@@ -65,7 +69,7 @@ export async function getKitchenOrders(selectedStation = null) {
 
     if (error) {
       console.error('เกิดข้อผิดพลาดในการดึงข้อมูล:', error.message);
-      return { orders: [], error: error.message };
+      return { orders: [], error: toDisplayError(error, 'kds load') };
     }
 
     if (!rawItems || rawItems.length === 0) {
@@ -112,6 +116,10 @@ export async function getKitchenOrders(selectedStation = null) {
         created_at: item.created_at,
         station: item.menu_items?.kitchen_station,
         image_url: item.menu_items?.image_url ?? null,
+        // ตัวเลือกที่ลูกค้าเลือก เช่น ["เผ็ดน้อย"] (ต้องรัน migration 027 — ไม่งั้นได้รายการว่าง)
+        options: (item.order_item_options ?? [])
+          .map((chosen) => chosen.menu_item_options?.option_name)
+          .filter(Boolean),
       });
     }
 
@@ -123,7 +131,7 @@ export async function getKitchenOrders(selectedStation = null) {
     return { orders: activeOrders, error: null };
   } catch (err) {
     console.error('เกิดข้อผิดพลาด:', err.message);
-    return { orders: [], error: err.message };
+    return { orders: [], error: toDisplayError(err, 'kds load') };
   }
 }
 
@@ -192,7 +200,7 @@ export async function updateOrderItemStatus(itemId, newStatus, cancelReason = nu
 
     if (error) {
       console.error('ไม่สามารถอัปเดตสถานะอาหารได้:', error.message);
-      return { success: false, error: error.message };
+      return { success: false, error: toDisplayError(error, 'kds update') };
     }
     if (!updated || updated.length === 0) {
       return { success: false, error: 'รายการนี้ถูกเปลี่ยนสถานะไปแล้ว กรุณารีเฟรช' };
@@ -222,7 +230,7 @@ export async function updateOrderItemStatus(itemId, newStatus, cancelReason = nu
     return { success: true, error: null };
   } catch (err) {
     console.error('เกิดข้อผิดพลาด:', err.message);
-    return { success: false, error: err.message };
+    return { success: false, error: toDisplayError(err, 'kds update') };
   }
 }
 
@@ -248,7 +256,7 @@ export async function markAllServed(orderId) {
 
     if (cookingError) {
       console.error('ตัดสต็อกไม่สำเร็จ:', cookingError.message);
-      return { success: false, error: cookingError.message };
+      return { success: false, error: toDisplayError(cookingError, 'kds mark all') };
     }
 
     // 2. cooking -> served
@@ -260,13 +268,13 @@ export async function markAllServed(orderId) {
 
     if (error) {
       console.error('ไม่สามารถทำเสร็จทั้งหมดได้:', error.message);
-      return { success: false, error: error.message };
+      return { success: false, error: toDisplayError(error, 'kds update') };
     }
 
     revalidatePath('/kds');
     return { success: true, error: null };
   } catch (err) {
     console.error('เกิดข้อผิดพลาด:', err.message);
-    return { success: false, error: err.message };
+    return { success: false, error: toDisplayError(err, 'kds update') };
   }
 }

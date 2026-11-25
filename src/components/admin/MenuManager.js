@@ -1,12 +1,11 @@
 'use client';
 
-import { memo, useId, useMemo, useRef, useState } from 'react';
+import { memo, useId, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   CircleCheck,
   CircleOff,
   FolderCog,
-  ImagePlus,
   ListChecks,
   PackageX,
   Pencil,
@@ -16,10 +15,10 @@ import {
   UtensilsCrossed,
 } from 'lucide-react';
 import { deleteMenuItem, saveCategory, saveMenuItem, setMenuAvailability } from '@/app/(admin)/menu/actions';
-import { AlertMessage, Button, MenuImage, Modal } from '@/components/ui';
+import { AlertMessage, Button, ImagePickerField, MenuImage, Modal } from '@/components/ui';
 import { useDebounce } from '@/hooks/useDebounce';
-import { KITCHEN_STATION_LABELS, MENU_IMAGE_BUCKET } from '@/lib/constants';
-import { createClient } from '@/lib/supabase/client';
+import { useImageUpload } from '@/hooks/useImageUpload';
+import { KITCHEN_STATION_LABELS } from '@/lib/constants';
 import { cn, formatCurrency } from '@/lib/utils';
 
 const INPUT_CLASS =
@@ -31,9 +30,6 @@ const STATUS_DISPLAY = {
   out_of_stock: { label: 'หมด (วัตถุดิบไม่พอ)', className: 'bg-danger-soft text-danger' },
   manual_off: { label: 'ปิดขาย', className: 'bg-line text-ink-muted' },
 };
-
-const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
 /**
  * หน้าจัดการเมนู (4.2): สรุปสถานะ, กรองหมวด/ค้นหา, เพิ่ม/แก้/ลบเมนู, เปิด/ปิดขาย, จัดการหมวดหมู่
@@ -214,6 +210,16 @@ const MenuCard = memo(function MenuCard({ item, categoryName, isBusy, onEdit, on
           {item.maxQuantityPerOrder && <span className="rounded-full bg-surface px-2 py-0.5">สั่งได้ {item.maxQuantityPerOrder}/ครั้ง</span>}
           {item.bomCount === 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-900">ยังไม่มีสูตร</span>}
         </div>
+        {item.availabilityStatus === 'manual_off' && item.disabledReason && (
+          <p className="truncate text-xs font-semibold text-danger" title={item.disabledReason}>
+            ปิดเพราะ: {item.disabledReason}
+          </p>
+        )}
+        {item.ingredientNames.length > 0 && (
+          <p className="truncate text-xs text-ink-muted" title={item.ingredientNames.join(', ')}>
+            วัตถุดิบ: {item.ingredientNames.join(', ')}
+          </p>
+        )}
         <div className="mt-auto flex flex-wrap gap-2 pt-1">
           <Button size="sm" variant="secondary" icon={Pencil} onClick={() => onEdit(item)}>
             แก้ไข
@@ -301,7 +307,6 @@ function CloseReasonModal({ item, onClose, onDone }) {
 function MenuFormModal({ item, categories, onClose, onDone }) {
   const isNew = !item.id;
   const formId = useId();
-  const fileInputRef = useRef(null);
   const activeCategories = categories.filter((category) => category.isActive || category.id === item.categoryId);
 
   const [values, setValues] = useState(() => ({
@@ -311,79 +316,33 @@ function MenuFormModal({ item, categories, onClose, onDone }) {
     kitchenStation: item.kitchenStation ?? 'fresh',
     extraPrice: String(item.extraPrice ?? 0),
     maxQuantityPerOrder: item.maxQuantityPerOrder ? String(item.maxQuantityPerOrder) : '',
-    imageUrl: item.imageUrl ?? null,
   }));
-  // รูปที่อัปโหลดในหน้าต่างนี้แต่ยังไม่ได้บันทึก (ปิดหน้าต่างโดยไม่บันทึก → ลบทิ้ง)
-  const unsavedUploadRef = useRef(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const imageUpload = useImageUpload({ initialUrl: item.imageUrl ?? null, folder: 'items' });
   const [busyAction, setBusyAction] = useState(null);
   const [formError, setFormError] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   const setValue = (key) => (event) => setValues((current) => ({ ...current, [key]: event.target.value }));
-  const isBusy = busyAction !== null || isUploading;
-
-  /** ลบรูปที่อัปโหลดไว้แต่ยังไม่ได้บันทึก */
-  const discardUnsavedUpload = async () => {
-    const path = unsavedUploadRef.current;
-    unsavedUploadRef.current = null;
-    if (path) await createClient().storage.from(MENU_IMAGE_BUCKET).remove([path]);
-  };
+  const isBusy = busyAction !== null || imageUpload.isUploading;
 
   const handleClose = () => {
-    discardUnsavedUpload();
+    imageUpload.discardUnsaved();
     onClose();
-  };
-
-  const handleFileChange = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    if (!IMAGE_TYPES.includes(file.type)) {
-      setFieldErrors((current) => ({ ...current, imageUrl: 'ใช้ได้เฉพาะไฟล์ JPG, PNG หรือ WEBP' }));
-      return;
-    }
-    if (file.size > MAX_IMAGE_BYTES) {
-      setFieldErrors((current) => ({ ...current, imageUrl: 'รูปใหญ่เกิน 2 MB' }));
-      return;
-    }
-
-    setIsUploading(true);
-    setFieldErrors((current) => ({ ...current, imageUrl: null }));
-    const supabase = createClient();
-    const extension = file.type.split('/')[1].replace('jpeg', 'jpg');
-    const path = `items/${crypto.randomUUID()}.${extension}`;
-    const { error } = await supabase.storage.from(MENU_IMAGE_BUCKET).upload(path, file, { contentType: file.type, cacheControl: '31536000' });
-    setIsUploading(false);
-    if (error) {
-      setFieldErrors((current) => ({ ...current, imageUrl: 'อัปโหลดรูปไม่สำเร็จ (ถ้าเพิ่งอัปเดตระบบ ให้รัน migration 025 ก่อน)' }));
-      return;
-    }
-
-    await discardUnsavedUpload();
-    unsavedUploadRef.current = path;
-    const { data } = supabase.storage.from(MENU_IMAGE_BUCKET).getPublicUrl(path);
-    setValues((current) => ({ ...current, imageUrl: data.publicUrl }));
-  };
-
-  const handleRemoveImage = async () => {
-    await discardUnsavedUpload();
-    setValues((current) => ({ ...current, imageUrl: null }));
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setBusyAction('save');
     setFormError(null);
-    const result = await saveMenuItem({ id: item.id ?? null, ...values });
+    const result = await saveMenuItem({ id: item.id ?? null, ...values, imageUrl: imageUpload.imageUrl });
     setBusyAction(null);
     setFieldErrors(result.fieldErrors ?? {});
     if (result.error) {
       setFormError(result.error);
       return;
     }
-    unsavedUploadRef.current = null; // บันทึกแล้ว ไม่ต้องลบรูป
+    imageUpload.markSaved(); // บันทึกแล้ว ไม่ต้องลบรูป
     onDone(isNew ? `เพิ่มเมนู ${values.name.trim()} แล้ว` : `บันทึก ${values.name.trim()} แล้ว`);
     onClose();
   };
@@ -398,7 +357,7 @@ function MenuFormModal({ item, categories, onClose, onDone }) {
       setIsConfirmingDelete(false);
       return;
     }
-    await discardUnsavedUpload();
+    await imageUpload.discardUnsaved();
     onDone(`ลบเมนู ${item.name} แล้ว`);
     onClose();
   };
@@ -432,22 +391,7 @@ function MenuFormModal({ item, categories, onClose, onDone }) {
       }
     >
       <form id={formId} onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-        <div className="flex items-start gap-4">
-          <MenuImage src={values.imageUrl} alt="รูปเมนู" className="size-28" />
-          <div className="flex flex-col gap-2">
-            <input ref={fileInputRef} type="file" accept={IMAGE_TYPES.join(',')} onChange={handleFileChange} className="hidden" />
-            <Button variant="secondary" size="sm" icon={ImagePlus} isLoading={isUploading} disabled={isBusy} onClick={() => fileInputRef.current?.click()}>
-              {values.imageUrl ? 'เปลี่ยนรูป' : 'เลือกรูป'}
-            </Button>
-            {values.imageUrl && (
-              <Button variant="ghost" size="sm" disabled={isBusy} onClick={handleRemoveImage}>
-                เอารูปออก
-              </Button>
-            )}
-            <span className="text-xs text-ink-muted">JPG / PNG / WEBP ไม่เกิน 2 MB</span>
-            {fieldErrors.imageUrl && <span className="text-sm font-semibold text-danger">{fieldErrors.imageUrl}</span>}
-          </div>
-        </div>
+        <ImagePickerField upload={imageUpload} isDisabled={busyAction !== null} error={fieldErrors.imageUrl} />
 
         <Field label="ชื่อเมนู" error={fieldErrors.name}>
           <input value={values.name} onChange={setValue('name')} maxLength={150} className={INPUT_CLASS} />

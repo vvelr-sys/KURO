@@ -26,6 +26,10 @@
 | [`supabase/migrations/023_kitchen_read_sessions.sql`](../supabase/migrations/023_kitchen_read_sessions.sql) | ให้ `kitchen` อ่าน `sessions` / `session_tables` (จอครัวหาเลขโต๊ะ) | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
 | [`supabase/migrations/024_inventory_reports_audit.sql`](../supabase/migrations/024_inventory_reports_audit.sql) | FR-024 ปิด/เปิดเมนูอัตโนมัติตามสต็อก, Manager แก้สูตร BOM ได้, Admin ปรับยอดฉุกเฉิน (`fn_emergency_adjust_stock`), Manager ไม่เห็น Audit Log ของ Admin | ✅ รันซ้ำได้ (ปรับสถานะเมนูให้ตรงสต็อกทันทีที่รัน) |
 | [`supabase/migrations/025_menu_packages_staff.sql`](../supabase/migrations/025_menu_packages_staff.sql) | T-10: `menu_items.max_quantity_per_order`, Manager แก้หมวดหมู่ได้, Storage bucket `menu-images` + สิทธิ์อัปโหลด | ✅ รันซ้ำได้ ไม่แก้ข้อมูลเดิม |
+| [`supabase/migrations/026_ingredient_images.sql`](../supabase/migrations/026_ingredient_images.sql) | รูปวัตถุดิบ `ingredients.image_url` + `fn_ingredients_for_count` คืนรูปให้หน้านับสต็อก | ✅ รันซ้ำได้ ไม่แก้ข้อมูลเดิม · ต้องรันหลัง 025 |
+| [`supabase/migrations/027_staff_read_order_options.sql`](../supabase/migrations/027_staff_read_order_options.sql) | พนักงานที่ล็อกอินอ่าน `order_item_options` / `menu_item_options` ได้ (จอครัวแสดงตัวเลือก เช่น เผ็ดน้อย) | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
+| [`supabase/migrations/028_fix_permissions_review.sql`](../supabase/migrations/028_fix_permissions_review.sql) | แก้สิทธิ์จากการตรวจระบบ: ครัวเปิด/ปิดเมนูผ่าน `fn_set_menu_availability`, คนไม่ล็อกอินเพิ่ม/อ่านออเดอร์ไม่ได้, พนักงานแก้ `order_items` ได้เฉพาะสถานะ/การยกเลิก, พนักงานเห็นหมวดที่ปิด | ✅ รันซ้ำได้ ไม่แก้ข้อมูล · **ต้องรัน ไม่งั้นปุ่มเปิด/ปิดเมนูใช้ไม่ได้** |
+| [`supabase/rename_menus_match_ingredients.sql`](../supabase/rename_menus_match_ingredients.sql) | เปลี่ยนชื่อเมนู 4 รายการให้ตรงกับชื่อวัตถุดิบ (หมูสามชั้น, เต้าหู้ปลา, เกี๊ยวกุ้ง, เนื้อวากิว) | ✅ รันครั้งเดียวพอ รันซ้ำได้ ไม่ลบข้อมูล — ฐานข้อมูลที่รัน seed_master.sql ใหม่แล้วไม่ต้องรัน |
 | [`supabase/seed_kitchen_test.sql`](../supabase/seed_kitchen_test.sql) | ข้อมูลทดสอบจอครัว: ออเดอร์ "รอทำ" 3 ใบ (สั่ง 1 / 10 / 18 นาทีที่แล้ว) ถ้าไม่มีโต๊ะที่มีลูกค้าจะเปิดรอบทดสอบให้ 3 โต๊ะ | ✅ เพิ่มอย่างเดียว ไม่ลบของเดิม ไม่ตัดสต็อก · ลบได้ด้วย `DELETE FROM orders WHERE order_number LIKE 'TEST-%'` |
 | [`supabase/seed_master.sql`](../supabase/seed_master.sql) | ข้อมูลหลัก: ตั้งค่า VAT/ค่าปรับ, แพ็กเกจ, โต๊ะ T01-T08, หมวด, วัตถุดิบ, เมนู, ตัวเลือก, BOM, อัตราใช้ต่อหัว | ✅ รันซ้ำ = รีเซ็ตข้อมูลหลักกลับค่าตั้งต้น (ยกเว้นสถานะโต๊ะ) |
 | [`supabase/seed_demo.sql`](../supabase/seed_demo.sql) | ล้างข้อมูลการใช้งาน แล้วใส่ข้อมูลจำลอง (คิว, 3 โต๊ะกำลังใช้งาน, ออเดอร์, บิล, ประวัติ 7 วัน ฯลฯ) | ✅ ทั้งไฟล์อยู่ใน Transaction เดียว ผิดพลาดตรงไหน ROLLBACK ทั้งหมด |
@@ -36,7 +40,7 @@
 
 | ลำดับ | ทำอะไร | ที่ไหน |
 |:---:|---|---|
-| 0 | `supabase/migrations/002_v18_fixes.sql` → `003_queue_guests_tax_invoice.sql` → `004_protect_profiles.sql` → `005_table_session_functions.sql` → `006_queue_functions.sql` → `007_billing_functions.sql` → `008_settings_receipt_messages.sql` → `020_kitchen_cancel_return_and_audit.sql` → `021_fix_cancel_return_actor.sql` → `022_staff_stock_counting.sql` → `023_kitchen_read_sessions.sql` → `024_inventory_reports_audit.sql` → `025_menu_packages_staff.sql` (แก้ schema ครั้งเดียว หลัง `001_initial_schema.sql`) | SQL Editor |
+| 0 | `supabase/migrations/002_v18_fixes.sql` → `003_queue_guests_tax_invoice.sql` → `004_protect_profiles.sql` → `005_table_session_functions.sql` → `006_queue_functions.sql` → `007_billing_functions.sql` → `008_settings_receipt_messages.sql` → `020_kitchen_cancel_return_and_audit.sql` → `021_fix_cancel_return_actor.sql` → `022_staff_stock_counting.sql` → `023_kitchen_read_sessions.sql` → `024_inventory_reports_audit.sql` → `025_menu_packages_staff.sql` → `026_ingredient_images.sql` → `027_staff_read_order_options.sql` → `028_fix_permissions_review.sql` (แก้ schema ครั้งเดียว หลัง `001_initial_schema.sql`) | SQL Editor |
 | 1 | สร้างบัญชีทดสอบ 5 ตำแหน่ง — เลือก **วิธี A** หรือ **วิธี B** ด้านล่าง | Dashboard / Terminal |
 | 2 | `supabase/seed_master.sql` | SQL Editor |
 | 3 | `supabase/seed_demo.sql` (เฉพาะฐานข้อมูลพัฒนา/ทดสอบ) | SQL Editor |
@@ -175,6 +179,14 @@ union all select 'audit_logs', count(*) from audit_logs;
 
 ไม่ได้เก็บรหัสเครื่องของลูกค้าในฐานข้อมูล (ไม่ต้องแก้ schema)
 
+> [!IMPORTANT]
+> **ตั้งแต่ migration 028:** คนไม่ล็อกอินอ่าน/เพิ่มข้อมูลในตาราง `orders` / `order_items` ตรงๆ ไม่ได้แล้ว (เดิมใครก็ยิงออเดอร์ปลอมเข้าโต๊ะไหนก็ได้โดยไม่ต้องมี QR)
+> ลูกค้ายังสแกน QR สั่งได้เหมือนเดิม — แต่ทุกครั้งที่หน้าลูกค้าอ่านหรือบันทึกออเดอร์ ต้องตรวจ token ตามขั้นตอนด้านบนที่เซิร์ฟเวอร์ก่อน เลือกได้ 2 วิธี:
+> - **(A) แนะนำ:** ฟังก์ชัน SQL แบบ `SECURITY DEFINER` ที่รับ token แล้วตรวจเอง เช่น `fn_customer_place_order(token, รายการ)` — แบบเดียวกับฟังก์ชันเปิดโต๊ะ/ออกบิล
+> - **(B)** Server Action อ่าน token จาก cookie → ตรวจกับ `qr_access_tokens` → ผ่านแล้วบันทึกด้วย `createAdminClient()` (ต้องมี `SUPABASE_SERVICE_ROLE_KEY`)
+>
+> ห้ามแก้โดยเปิด policy ให้ `anon` อ่าน/เพิ่มตรงกลับมา
+
 ### หน้าดูคิวของลูกค้า `/queue/[queueId]`
 
 | เลขคิว | สถานะ | ผู้ใหญ่ + เด็ก / ขนาดโต๊ะ | URL |
@@ -193,8 +205,8 @@ union all select 'audit_logs', count(*) from audit_logs;
 | `packages` | บุฟเฟต์ชาบูมาตรฐาน: ผู้ใหญ่ 299 / เด็ก (<120 ซม.) 149 / 90 นาที (ราคาตัวอย่าง) | `/packages`, เปิดโต๊ะใน `/tables` |
 | `dining_tables` | T01-T08 ความจุ 2,2,4,4,4,6,6,8 | `/tables`, `/queues` (จับคู่ขนาดโต๊ะ) |
 | `categories` | เนื้อสัตว์และอาหารทะเล / ผักและเห็ด / ลูกชิ้นและของทานเล่น | `/menu`, `/order/[tableNumber]` |
-| `menu_items` (11) | สถานี fresh / grill / hot_kitchen (**ไม่มีเมนูเครื่องดื่ม** — ลูกค้าหยิบเครื่องดื่มเอง); **เกี๊ยวกุ้งทอด = `manual_off`** (หม้อทอดชำรุด), **ผักบุ้ง = `out_of_stock`**, **เนื้อวากิว = สั่งเพิ่ม 159 บาท** | `/menu`, `/stock-override`, หน้าลูกค้า (สถานะ "หมด"), `/kds` แยกสถานี |
-| `menu_item_options` | กลุ่ม "น้ำจิ้ม" (เนื้อวัวสไลซ์) และ "ระดับความเผ็ด" (หมูสามชั้นย่าง) | หน้าสั่งอาหาร, การ์ด KDS |
+| `menu_items` (11) | สถานี fresh / grill / hot_kitchen (**ไม่มีเมนูเครื่องดื่ม** — ลูกค้าหยิบเครื่องดื่มเอง); **เกี๊ยวกุ้ง = `manual_off`** (หม้อทอดชำรุด), **ผักบุ้ง = `out_of_stock`**, **เนื้อวากิว = สั่งเพิ่ม 159 บาท** | `/menu`, `/stock-override`, หน้าลูกค้า (สถานะ "หมด"), `/kds` แยกสถานี |
+| `menu_item_options` | กลุ่ม "น้ำจิ้ม" (เนื้อวัวสไลซ์) และ "ระดับความเผ็ด" (หมูสามชั้น) | หน้าสั่งอาหาร, การ์ด KDS |
 | `ingredients` (12, หน่วย g) | **กุ้งขาว** 2,600/เกณฑ์ 2,500 (หลัง seed_demo เหลือ 1,900 → ต่ำกว่าเกณฑ์), **ผักบุ้ง** 0 (หมด → เมนู out_of_stock), **ผงชาไทย** 3,000 (เครื่องดื่มบริการตนเอง: มีในสต็อกแต่ไม่มีเมนูให้สั่ง) | `/inventory` แจ้งเตือนสต็อกต่ำ |
 | `menu_ingredients`, `package_menu_items`, `usage_rates` | BOM ต่อจาน, เมนูในบุฟเฟต์ (ทุกเมนูยกเว้นวากิว), อัตราใช้ต่อหัว | `/menu` (สูตร BOM), ตัดสต็อกเมื่อ cooking |
 
@@ -202,8 +214,8 @@ union all select 'audit_logs', count(*) from audit_logs;
 
 | ข้อมูล | รายละเอียด | ใช้ทดสอบ / ใคร |
 |---|---|---|
-| **Session A — T01** | `active` ผู้ใหญ่ 2 เด็ก 1 เพิ่งเปิด; ออเดอร์ 2 รอบ: served 3, cooking 1 (หมูสามชั้น+เผ็ดน้อย), pending 2 (ลูกชิ้น, เต้าหู้ปลาทอด), cancelled 1 (กุ้ง ยกเลิกจาก pending โดย Staff) | ลูกค้า: สั่งอาหาร/สถานะ/สรุป · ครัว: `/kds` · Cashier/Staff: `/tables` |
-| **Session B — T02** | `active` ผู้ใหญ่ 4 **หมดเวลาในอีก 5 นาที**; รอบ 2 สั่งมา 20 นาที: cooking 2, pending 1, cancelled 1 (หมูสามชั้นย่าง ยกเลิกระหว่าง cooking → คืนสต็อก `cancel_return`) | ตัวจับเวลา/ล็อกสั่งเมื่อหมดเวลา, สีเตือนรอนานใน KDS |
+| **Session A — T01** | `active` ผู้ใหญ่ 2 เด็ก 1 เพิ่งเปิด; ออเดอร์ 2 รอบ: served 3, cooking 1 (หมูสามชั้น+เผ็ดน้อย), pending 2 (ลูกชิ้น, เต้าหู้ปลา), cancelled 1 (กุ้ง ยกเลิกจาก pending โดย Staff) | ลูกค้า: สั่งอาหาร/สถานะ/สรุป · ครัว: `/kds` · Cashier/Staff: `/tables` |
+| **Session B — T02** | `active` ผู้ใหญ่ 4 **หมดเวลาในอีก 5 นาที**; รอบ 2 สั่งมา 20 นาที: cooking 2, pending 1, cancelled 1 (หมูสามชั้น ยกเลิกระหว่าง cooking → คืนสต็อก `cancel_return`) | ตัวจับเวลา/ล็อกสั่งเมื่อหมดเวลา, สีเตือนรอนานใน KDS |
 | **Session C — T03** | `billed` ผู้ใหญ่ 3 เด็ก 2; ชั่งเนื้อเหลือ 250 g → ค่าปรับ 300; บิล `unpaid` = 1,195 + วากิว 159 + 300 = **1,654.00** (VAT ถอดใน 108.21) พร้อม `bill_items` 4 บรรทัด | Cashier: `/billing`, `/billing/tax-invoice` (รับชำระ, Split, ใบกำกับภาษี) |
 | `queues` | C001 waiting, A001 called, B001 seated | Cashier: `/queues` · ลูกค้า: `/queue/[queueId]` |
 | `service_requests` | T01 ขอน้ำ (`pending`), T02 ขอเปลี่ยนหม้อ (`completed` โดย Staff) | Staff: `/service-requests` · ลูกค้า: `/order/T01/call-staff` |

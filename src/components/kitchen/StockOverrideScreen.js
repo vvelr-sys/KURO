@@ -78,6 +78,11 @@ const MenuItemCard = React.memo(function MenuItemCard({ item, isPending, onToggl
         <span className={cn('mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-xs font-bold', status.className)}>
           {status.label}
         </span>
+        {item.availability_status === 'manual_off' && item.disabled_reason && (
+          <p className="mt-1 truncate text-xs text-danger" title={item.disabled_reason}>
+            เหตุผล: {item.disabled_reason}
+          </p>
+        )}
       </div>
       <AvailabilitySwitch item={item} isPending={isPending} onToggle={onToggle} />
     </article>
@@ -178,7 +183,7 @@ export default function StockOverrideScreen() {
   const applyAvailability = useCallback(async (item, nextStatus, reason = null) => {
     setPageError(null);
     setPendingIds((prev) => new Set(prev).add(item.id));
-    setMenuItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, availability_status: nextStatus } : i)));
+    setMenuItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, availability_status: nextStatus, disabled_reason: nextStatus === 'manual_off' ? reason : null } : i)));
 
     const { success, error } = await toggleMenuAvailability(item.id, nextStatus, reason);
 
@@ -190,7 +195,7 @@ export default function StockOverrideScreen() {
 
     if (!success) {
       setMenuItems((prev) =>
-        prev.map((i) => (i.id === item.id ? { ...i, availability_status: item.availability_status } : i))
+        prev.map((i) => (i.id === item.id ? { ...i, availability_status: item.availability_status, disabled_reason: item.disabled_reason } : i))
       );
       setPageError(`${item.name}: ${error || 'ไม่สามารถอัปเดตสถานะเมนูได้'}`);
     }

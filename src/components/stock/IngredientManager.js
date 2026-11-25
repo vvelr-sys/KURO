@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pencil, Plus, Search, ShieldAlert } from 'lucide-react';
-import { AlertMessage, Button, Modal } from '@/components/ui';
+import { AlertMessage, Button, ImagePickerField, MenuImage, Modal } from '@/components/ui';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useImageUpload } from '@/hooks/useImageUpload';
 import { formatStockNumber, getStockStatus } from '@/lib/stock';
 import { cn } from '@/lib/utils';
 
@@ -26,6 +27,8 @@ function IngredientFormModal({ ingredient, onSave, onClose }) {
   const [name, setName] = useState(ingredient?.name ?? '');
   const [unit, setUnit] = useState(ingredient?.unit ?? 'g');
   const [threshold, setThreshold] = useState(String(ingredient?.minimum_threshold ?? 0));
+  // รูปช่วยให้ staff หยิบนับถูกตัว (migration 026)
+  const imageUpload = useImageUpload({ initialUrl: ingredient?.image_url ?? null, folder: 'ingredients' });
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState(null);
 
@@ -33,31 +36,50 @@ function IngredientFormModal({ ingredient, onSave, onClose }) {
     event.preventDefault();
     setIsSaving(true);
     setFormError(null);
-    const result = await onSave({ id: ingredient?.id ?? null, name, unit, minimumThreshold: threshold });
+    const result = await onSave({ id: ingredient?.id ?? null, name, unit, minimumThreshold: threshold, imageUrl: imageUpload.imageUrl });
     setIsSaving(false);
-    if (result.success) onClose();
-    else setFormError(result.error);
+    if (result.success) {
+      imageUpload.markSaved();
+      onClose();
+    } else {
+      setFormError(result.error);
+    }
   };
+
+  // ปิดโดยไม่บันทึก → ลบรูปที่เพิ่งอัปโหลด
+  const handleClose = () => {
+    imageUpload.discardUnsaved();
+    onClose();
+  };
+  const isBusy = isSaving || imageUpload.isUploading;
 
   return (
     <Modal
       isOpen
-      onClose={onClose}
-      isCloseDisabled={isSaving}
+      onClose={handleClose}
+      isCloseDisabled={isBusy}
       title={isNew ? 'เพิ่มวัตถุดิบ' : 'แก้ไขวัตถุดิบ'}
       description={isNew ? 'ยอดเริ่มต้นเป็น 0 — เพิ่มยอดด้วย "รับของเข้า"' : 'ยอดคงเหลือแก้ที่นี่ไม่ได้'}
       footer={
         <>
-          <Button variant="secondary" className="flex-1" onClick={onClose} disabled={isSaving}>
+          <Button variant="secondary" className="flex-1" onClick={handleClose} disabled={isBusy}>
             ยกเลิก
           </Button>
-          <Button type="submit" form="ingredient-form" className="flex-1" isLoading={isSaving}>
+          <Button type="submit" form="ingredient-form" className="flex-1" isLoading={isSaving} disabled={isBusy}>
             บันทึก
           </Button>
         </>
       }
     >
       <form id="ingredient-form" onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <ImagePickerField upload={imageUpload} isDisabled={isSaving} />
+        {!imageUpload.imageUrl && (
+          <p className="-mt-2 text-xs text-ink-muted">
+            {ingredient?.used_in_menus?.some((menu) => menu.image_url)
+              ? `ไม่ใส่รูป = ใช้รูปจากเมนู "${ingredient.used_in_menus.find((menu) => menu.image_url).name}" อัตโนมัติ`
+              : 'ไม่ใส่รูป = แสดงไอคอนแทน (วัตถุดิบนี้ยังไม่มีเมนูที่มีรูป)'}
+          </p>
+        )}
         <label className="flex flex-col gap-1.5">
           <span className="font-semibold">ชื่อวัตถุดิบ</span>
           <input className={INPUT_CLASS} value={name} onChange={(e) => setName(e.target.value)} placeholder="เช่น หมูสามชั้นสไลซ์" autoFocus />
@@ -256,6 +278,7 @@ export default function IngredientManager({ staffRole, loadAction, saveAction, a
             <thead className="bg-surface text-left text-ink-muted">
               <tr>
                 <th className="px-4 py-3 font-semibold">วัตถุดิบ</th>
+                <th className="px-4 py-3 font-semibold">ใช้ในเมนู</th>
                 <th className="px-4 py-3 text-right font-semibold">คงเหลือ</th>
                 <th className="px-4 py-3 text-right font-semibold">จุดสั่งซื้อ</th>
                 <th className="px-4 py-3 font-semibold">สถานะ</th>
@@ -267,7 +290,33 @@ export default function IngredientManager({ staffRole, loadAction, saveAction, a
                 const status = STATUS_DISPLAY[row.status];
                 return (
                   <tr key={row.id}>
-                    <td className="px-4 py-3 font-semibold">{row.name}</td>
+                    <td className="px-4 py-3">
+                      <span className="flex items-center gap-3">
+                        <MenuImage src={row.display_image_url} className="size-10 rounded-xl" />
+                        <span>
+                          <span className="block font-semibold">{row.name}</span>
+                          {row.image_from_menu && <span className="block text-xs text-ink-muted">รูปจากเมนู {row.image_from_menu}</span>}
+                        </span>
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.used_in_menus?.length > 0 ? (
+                        <span className="flex flex-wrap gap-1">
+                          {row.used_in_menus.map((menu) => (
+                            <span key={menu.id} className="rounded-full bg-surface px-2 py-0.5 text-xs font-semibold">
+                              {menu.name}
+                            </span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span
+                          className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900"
+                          title="ขายเมนูไหนก็ไม่ตัดสต็อกตัวนี้ — ผูกกับเมนูที่แท็บสูตรตัดสต็อก (BOM)"
+                        >
+                          ยังไม่อยู่ในเมนูไหน
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right font-bold tabular-nums">
                       {formatStockNumber(row.current_stock)} <span className="text-xs font-normal text-ink-muted">{row.unit}</span>
                     </td>

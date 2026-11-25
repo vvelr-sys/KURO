@@ -242,6 +242,22 @@ const OrderTicketCard = React.memo(function OrderTicketCard({ order, nowTimestam
 
                 <div className="min-w-0 flex-1 leading-tight">
                   <p className={cn("truncate text-lg font-bold", isServed && "text-ink-muted line-through")}>{dish.menu_item_name}</p>
+                  {/* ตัวเลือกที่ลูกค้าเลือก (เช่น เผ็ดน้อย, น้ำจิ้มงา) — เด่นให้ครัวไม่พลาด */}
+                  {dish.options?.length > 0 && (
+                    <p className="mt-1 flex flex-wrap gap-1">
+                      {dish.options.map((optionName) => (
+                        <span
+                          key={optionName}
+                          className={cn(
+                            "rounded-md px-1.5 py-0.5 text-xs font-bold",
+                            isServed ? "bg-line text-ink-muted" : "bg-amber-100 text-amber-900"
+                          )}
+                        >
+                          {optionName}
+                        </span>
+                      ))}
+                    </p>
+                  )}
                   <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
                     <span
                       className={cn(
