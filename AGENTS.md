@@ -145,7 +145,8 @@ KURO/
         ├── 023_kitchen_read_sessions.sql            # ให้ kitchen อ่าน sessions/session_tables (จอครัวหาเลขโต๊ะ)
         ├── 024_inventory_reports_audit.sql          # FR-024 ปิด/เปิดเมนูอัตโนมัติ, Manager แก้ BOM, Admin ปรับยอดฉุกเฉิน, สิทธิ์อ่าน Audit Log
         ├── 025_customer_ordering.sql                # หน้าสั่งอาหารลูกค้า: ฟังก์ชันรับ QR token + ปิด RLS ที่ให้ anon เขียน orders/order_items ตรง
-        └── 026_customer_order_status.sql            # หน้าสถานะอาหารลูกค้า: fn_customer_get_orders (ดึงซ้ำทุก 10 วินาที แทน Realtime)
+        ├── 026_customer_order_status.sql            # หน้าสถานะอาหารลูกค้า: fn_customer_get_orders (ดึงซ้ำทุก 10 วินาที แทน Realtime)
+        └── 027_customer_service_requests.sql        # หน้าเรียกพนักงานลูกค้า: ปิด RLS anon บน service_requests + ฟังก์ชันแจ้ง/ดูคำขอ (กันกดซ้ำ)
 ```
 
 ---

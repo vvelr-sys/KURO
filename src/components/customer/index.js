@@ -7,5 +7,6 @@ export { default as CartSheet } from './CartSheet';
 export { default as CustomerMessage } from './CustomerMessage';
 export { default as CustomerTabs } from './CustomerTabs';
 export { default as StatusScreen } from './StatusScreen';
+export { default as CallStaffScreen } from './CallStaffScreen';
 export { default as OrderRoundCard, CUSTOMER_ITEM_STATUS } from './OrderRoundCard';
 export { makeCartKey, changeCartQuantity, mergeCarts, countByMenuItem, formatExtraPrice } from './cart';

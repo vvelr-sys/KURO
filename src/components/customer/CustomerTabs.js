@@ -1,24 +1,25 @@
 import Link from 'next/link';
-import { ClipboardList, UtensilsCrossed } from 'lucide-react';
+import { Bell, ClipboardList, UtensilsCrossed } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// แท็บสลับหน้าของลูกค้า (เพิ่มหน้า "เรียกพนักงาน" / "สรุปรายการ" ที่นี่เมื่อสร้างหน้าเสร็จ)
+// แท็บสลับหน้าของลูกค้า (เพิ่มหน้า "สรุปรายการ" ที่นี่เมื่อสร้างหน้าเสร็จ — แก้ grid-cols ให้ตรงจำนวนแท็บ)
 const CUSTOMER_TABS = [
   { key: 'order', label: 'สั่งอาหาร', path: '', icon: UtensilsCrossed },
   { key: 'status', label: 'สถานะอาหาร', path: '/status', icon: ClipboardList },
+  { key: 'call-staff', label: 'เรียกพนักงาน', path: '/call-staff', icon: Bell },
 ];
 
 /**
  * แท็บด้านบนของหน้าลูกค้า
  * @param {Object} props
  * @param {string} props.tableNumber
- * @param {'order'|'status'} props.current
+ * @param {'order'|'status'|'call-staff'} props.current
  */
 export default function CustomerTabs({ tableNumber, current }) {
   const basePath = `/order/${encodeURIComponent(tableNumber)}`;
 
   return (
-    <nav className="grid grid-cols-2 gap-1 rounded-2xl bg-line p-1" aria-label="เมนูลูกค้า">
+    <nav className="grid grid-cols-3 gap-1 rounded-2xl bg-line p-1" aria-label="เมนูลูกค้า">
       {CUSTOMER_TABS.map((tab) => {
         const isCurrent = tab.key === current;
         const Icon = tab.icon;
@@ -28,7 +29,7 @@ export default function CustomerTabs({ tableNumber, current }) {
             href={basePath + tab.path}
             aria-current={isCurrent ? 'page' : undefined}
             className={cn(
-              'flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-bold',
+              'flex h-12 flex-col items-center justify-center gap-0.5 rounded-xl text-xs font-bold',
               isCurrent ? 'bg-white text-primary shadow-sm' : 'text-ink-muted'
             )}
           >
