@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState, useTransition } from 'react';
+import Link from 'next/link';
 import { Lock, Search, ShoppingBasket, X } from 'lucide-react';
 import { AlertMessage } from '@/components/ui';
 import BrandLogo from '@/components/layout/BrandLogo';
@@ -11,6 +12,7 @@ import { placeCustomerOrder } from '@/app/order/[tableNumber]/actions';
 import { cn } from '@/lib/utils';
 import { changeCartQuantity, countByMenuItem, makeCartKey, mergeCarts } from './cart';
 import CartSheet from './CartSheet';
+import CustomerTabs from './CustomerTabs';
 import MenuCard from './MenuCard';
 import OptionPickerModal from './OptionPickerModal';
 import OrderTimer from './OrderTimer';
@@ -166,6 +168,8 @@ export default function OrderScreen({ tableNumber, session, categories }) {
           <OrderTimer expiresAtMs={expiresAtMs} />
         </div>
 
+        <CustomerTabs tableNumber={tableNumber} current="order" />
+
         <label className="relative block">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-ink-muted" aria-hidden />
           <input
@@ -217,7 +221,19 @@ export default function OrderScreen({ tableNumber, session, categories }) {
           </div>
         )}
 
-        {notice && <AlertMessage tone={notice.tone}>{notice.text}</AlertMessage>}
+        {notice && (
+          <AlertMessage tone={notice.tone}>
+            {notice.text}
+            {notice.tone === 'success' && !isSubmitting && (
+              <>
+                {' · '}
+                <Link href={`/order/${encodeURIComponent(tableNumber)}/status`} className="underline">
+                  ดูสถานะอาหาร
+                </Link>
+              </>
+            )}
+          </AlertMessage>
+        )}
 
         {visibleCategories.length === 0 && (
           <p className="py-10 text-center text-ink-muted">ไม่พบเมนู “{searchText.trim()}”</p>
