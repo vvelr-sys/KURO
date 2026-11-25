@@ -21,7 +21,7 @@ export async function getMenuItemsWithAvailability() {
 
     const { data, error } = await supabase
       .from('menu_items')
-      .select('id, name, kitchen_station, availability_status, category_id, categories(name)')
+      .select('id, name, image_url, kitchen_station, availability_status, category_id, categories(name)')
       .order('kitchen_station', { ascending: true })
       .order('name', { ascending: true });
 

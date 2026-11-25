@@ -47,6 +47,17 @@ export const KITCHEN_STATIONS = {
   HOT_KITCHEN: 'hot_kitchen',   // ครัวร้อน
 };
 
+// ชื่อสถานีครัวภาษาไทย (ใช้ในฟอร์มเมนูและป้ายต่างๆ)
+export const KITCHEN_STATION_LABELS = {
+  fresh: 'ของสด',
+  beverage: 'เครื่องดื่ม',
+  grill: 'ปิ้งย่าง',
+  hot_kitchen: 'ครัวร้อน',
+};
+
+// ชื่อ bucket รูปเมนูใน Supabase Storage (migration 025)
+export const MENU_IMAGE_BUCKET = 'menu-images';
+
 export const CALL_STAFF_TYPES = {
   CALL_STAFF: 'call_staff',     // เรียกพนักงาน
   WATER: 'water',               // ขอน้ำ
@@ -109,6 +120,9 @@ export const AUDIT_ACTION_LABELS = {
   ADJUST_STOCK_COUNT: 'อนุมัติผลนับ/ปรับยอด',
   REJECT_STOCK_COUNT: 'ปฏิเสธผลนับ',
   UPDATE_SETTINGS: 'แก้ตั้งค่าร้าน',
+  UPDATE_PACKAGE: 'แก้ราคาบุฟเฟต์/VAT',
+  CREATE_STAFF: 'เพิ่มพนักงาน',
+  UPDATE_STAFF: 'แก้ข้อมูลพนักงาน',
   EMERGENCY_OVERRIDE: 'แอดมินทำแทน (ฉุกเฉิน)',
 };
 

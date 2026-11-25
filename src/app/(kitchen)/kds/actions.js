@@ -35,7 +35,8 @@ export async function getKitchenOrders(selectedStation = null) {
         created_at,
         menu_items!inner (
           name,
-          kitchen_station
+          kitchen_station,
+          image_url
         ),
         orders!inner (
           id,
@@ -110,6 +111,7 @@ export async function getKitchenOrders(selectedStation = null) {
         cancel_reason: item.cancelled_reason,
         created_at: item.created_at,
         station: item.menu_items?.kitchen_station,
+        image_url: item.menu_items?.image_url ?? null,
       });
     }
 

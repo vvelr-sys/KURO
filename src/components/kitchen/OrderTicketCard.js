@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
-import { CheckCheck, Check, Flame, X } from "lucide-react";
-import { AlertMessage, Button, Modal } from "@/components/ui";
+import { CheckCheck, Check, ChefHat, Clock, Flame, X } from "lucide-react";
+import { AlertMessage, Button, MenuImage, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { updateOrderItemStatus, markAllServed } from "@/app/(kitchen)/kds/actions";
 
@@ -23,6 +23,9 @@ const NEXT_STATUS = {
   pending: "cooking",
   cooking: "served",
 };
+
+// ลำดับแสดงรายการในการ์ด: กำลังทำ → รอทำ → เสิร์ฟแล้ว
+const DISH_SORT_ORDER = { cooking: 0, pending: 1, served: 2 };
 
 /**
  * จัดรูปแบบเวลาเป็น นาที:วินาที เช่น 05:30
@@ -162,6 +165,14 @@ const OrderTicketCard = React.memo(function OrderTicketCard({ order, nowTimestam
   }, [isFinishingAll, order.order_id, onStatusChange]);
 
   const tableLabel = order.table_number || "-";
+  const servedCount = activeDishes.filter((dish) => dish.status === "served").length;
+  const progressPercent = activeDishes.length > 0 ? Math.round((servedCount / activeDishes.length) * 100) : 0;
+  const orderedAtText = earliestItemTime
+    ? new Intl.DateTimeFormat("th-TH", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit", hour12: false }).format(earliestItemTime)
+    : "-";
+
+  // เรียงรายการ: กำลังทำ → รอทำ → เสิร์ฟแล้ว (ของที่ต้องทำอยู่บนสุด)
+  const sortedDishes = [...activeDishes].sort((first, second) => DISH_SORT_ORDER[first.status] - DISH_SORT_ORDER[second.status]);
 
   return (
     <>
@@ -175,96 +186,94 @@ const OrderTicketCard = React.memo(function OrderTicketCard({ order, nowTimestam
 
       <article
         className={cn(
-          "flex flex-col gap-3 rounded-3xl bg-white p-4 shadow-sm",
+          "flex flex-col overflow-hidden rounded-3xl bg-white shadow-sm",
           isOverdue && "ring-2 ring-danger",
           isWarning && "ring-2 ring-amber-400"
         )}
       >
-        {/* ─── หัวการ์ด: ป้ายโต๊ะ + เลขบิล + เวลารอ ─── */}
-        <div className="flex items-start gap-4">
-          <div
-            className={cn(
-              "flex h-16 min-w-16 flex-col items-center justify-center rounded-2xl px-2",
-              isOverdue ? "bg-danger-soft text-danger" : "bg-primary text-white"
-            )}
-          >
-            <span className="text-xs opacity-80">โต๊ะ</span>
-            <span className="text-2xl font-bold leading-none">{tableLabel}</span>
-          </div>
+        {/* ─── หัวการ์ด: แถบสีตามเวลารอ + เลขโต๊ะ + เวลา ─── */}
+        <header
+          className={cn(
+            "flex items-center gap-3 px-4 py-3",
+            isOverdue ? "bg-danger text-white" : isWarning ? "bg-amber-400 text-ink" : "bg-primary text-white"
+          )}
+        >
           <div className="min-w-0 flex-1">
-            <p className="text-lg font-bold">{activeDishes.length} รายการ</p>
-            <p className="font-mono text-sm text-ink-muted">#{order.order_id?.toString().slice(-4)}</p>
+            <p className="text-xs font-semibold opacity-80">โต๊ะ</p>
+            <p className="truncate text-3xl font-bold leading-none">{tableLabel}</p>
           </div>
           <div className="text-right">
-            <p className={cn("text-2xl font-bold tabular-nums", isOverdue ? "text-danger" : "text-ink")}>
+            <p className="flex items-center justify-end gap-1 text-2xl font-bold tabular-nums leading-none">
+              <Clock className="size-5" aria-hidden />
               {formatWaitTime(waitingSeconds)}
             </p>
-            <p className="text-xs text-ink-muted">{isOverdue ? "เกินเกณฑ์" : "รอมาแล้ว"}</p>
+            <p className="mt-1 text-xs font-semibold opacity-80">
+              สั่ง {orderedAtText} น. · #{order.order_id?.toString().slice(-4)}
+            </p>
           </div>
+        </header>
+
+        {/* ─── ความคืบหน้า ─── */}
+        <div className="flex items-center gap-3 px-4 pt-3">
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface" aria-hidden>
+            <div className="h-full rounded-full bg-emerald-700 transition-all" style={{ width: `${progressPercent}%` }} />
+          </div>
+          <span className="text-sm font-semibold tabular-nums text-ink-muted">
+            เสร็จ {servedCount}/{activeDishes.length}
+          </span>
         </div>
 
         {/* ─── รายการอาหาร ─── */}
-        <ul className="flex flex-col gap-1.5">
-          {activeDishes.map((dish) => {
+        <ul className="flex flex-col gap-2 p-3">
+          {sortedDishes.map((dish) => {
             const isServed = dish.status === "served";
             const isCooking = dish.status === "cooking";
             const isSaving = savingItemIds.has(dish.id);
-            const canTap = !isServed && !isSaving;
 
             return (
               <li
                 key={dish.id}
                 className={cn(
-                  "flex items-center gap-3 rounded-2xl px-3 py-2",
-                  isServed ? "bg-emerald-50" : isCooking ? "bg-primary/5" : "bg-surface"
+                  "flex items-center gap-3 rounded-2xl p-2",
+                  isServed ? "bg-emerald-50" : isCooking ? "bg-primary/5 ring-1 ring-primary/20" : "bg-surface"
                 )}
               >
-                <button
-                  type="button"
-                  onClick={() => canTap && handleDishTap(dish)}
-                  disabled={!canTap}
-                  className={cn(
-                    "flex size-10 shrink-0 items-center justify-center rounded-xl border-2 transition-colors",
-                    isServed && "border-emerald-800 bg-emerald-800 text-white",
-                    isCooking && "border-primary bg-primary text-white hover:bg-primary-deep",
-                    dish.status === "pending" && "border-line bg-white hover:border-primary",
-                    isSaving && "cursor-wait opacity-60"
-                  )}
-                  aria-label={
-                    dish.status === "pending"
-                      ? `เริ่มทำ ${dish.menu_item_name}`
-                      : isCooking
-                        ? `เสิร์ฟ ${dish.menu_item_name}`
-                        : `${dish.menu_item_name} เสิร์ฟแล้ว`
-                  }
-                >
-                  {isSaving ? (
-                    <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
-                  ) : isServed ? (
-                    <Check className="size-5" aria-hidden />
-                  ) : isCooking ? (
-                    <Flame className="size-5" aria-hidden />
-                  ) : null}
-                </button>
+                <MenuImage src={dish.image_url} className="size-14" isDimmed={isServed} />
 
                 <div className="min-w-0 flex-1 leading-tight">
-                  <p className={cn("font-semibold", isServed && "text-ink-muted line-through")}>{dish.menu_item_name}</p>
-                  <p className={cn("text-xs", isCooking ? "font-semibold text-primary" : "text-ink-muted")}>
-                    {dish.status === "pending" && "รอทำ — แตะเพื่อเริ่มทำ"}
-                    {isCooking && "กำลังทำ — แตะเมื่อเสิร์ฟ"}
-                    {isServed && "เสิร์ฟแล้ว"}
-                    {STATION_DISPLAY[dish.station] && ` · ${STATION_DISPLAY[dish.station]}`}
+                  <p className={cn("truncate text-lg font-bold", isServed && "text-ink-muted line-through")}>{dish.menu_item_name}</p>
+                  <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 font-semibold",
+                        isServed ? "bg-emerald-100 text-emerald-800" : isCooking ? "bg-primary text-white" : "bg-white text-ink-muted"
+                      )}
+                    >
+                      {isServed ? "เสิร์ฟแล้ว" : isCooking ? "กำลังทำ" : "รอทำ"}
+                    </span>
+                    {STATION_DISPLAY[dish.station] && <span className="text-ink-muted">{STATION_DISPLAY[dish.station]}</span>}
                   </p>
                 </div>
 
-                <span
-                  className={cn(
-                    "shrink-0 rounded-full px-2.5 py-0.5 text-sm font-bold tabular-nums",
-                    isServed ? "bg-white text-ink-muted" : "bg-white text-ink shadow-sm"
-                  )}
-                >
-                  ×{dish.quantity}
-                </span>
+                <span className={cn("shrink-0 text-2xl font-bold tabular-nums", isServed && "text-ink-muted")}>×{dish.quantity}</span>
+
+                {/* ปุ่มเลื่อนสถานะ: รอทำ → เริ่มทำ (ตัดสต็อก) → เสิร์ฟ (ย้อนกลับไม่ได้ — FR-049) */}
+                {isServed ? (
+                  <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-emerald-800 text-white" aria-label="เสิร์ฟแล้ว">
+                    <Check className="size-6" aria-hidden />
+                  </span>
+                ) : (
+                  <Button
+                    variant={isCooking ? "success" : "primary"}
+                    icon={isCooking ? Check : Flame}
+                    isLoading={isSaving}
+                    onClick={() => handleDishTap(dish)}
+                    className="shrink-0"
+                    aria-label={isCooking ? `เสิร์ฟ ${dish.menu_item_name}` : `เริ่มทำ ${dish.menu_item_name}`}
+                  >
+                    {isCooking ? "เสิร์ฟ" : "เริ่มทำ"}
+                  </Button>
+                )}
 
                 {!isServed && (
                   <button
@@ -283,14 +292,21 @@ const OrderTicketCard = React.memo(function OrderTicketCard({ order, nowTimestam
           })}
         </ul>
 
-        <AlertMessage>{actionError}</AlertMessage>
+        <div className="flex flex-col gap-2 px-3 pb-3">
+          <AlertMessage>{actionError}</AlertMessage>
 
-        {/* ─── ทำเสร็จทั้งหมดในบิลนี้ (FR-021 Batch Action) ─── */}
-        {hasRemainingDishes && (
-          <Button variant="success" icon={CheckCheck} isLoading={isFinishingAll} onClick={handleCompleteAllDishes}>
-            ทำเสร็จทั้งหมดในบิลนี้
-          </Button>
-        )}
+          {/* ─── ทำเสร็จทั้งหมดในบิลนี้ (FR-021 Batch Action) ─── */}
+          {hasRemainingDishes ? (
+            <Button variant="success" icon={CheckCheck} isLoading={isFinishingAll} onClick={handleCompleteAllDishes}>
+              ทำเสร็จทั้งหมดในบิลนี้
+            </Button>
+          ) : (
+            <p className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-50 py-2.5 font-semibold text-emerald-800">
+              <ChefHat className="size-5" aria-hidden />
+              เสิร์ฟครบทุกรายการแล้ว
+            </p>
+          )}
+        </div>
       </article>
     </>
   );

@@ -33,6 +33,9 @@
 | **ให้ส่วนลด** | `APPROVE_DISCOUNT` | Cashier / Manager / Admin | `bills` | **ใช่** | ยอดเงินก่อนลด, จำนวนเงินส่วนลด, ยอดสุทธิ |
 | **ชั่งเนื้อสัตว์เหลือ** | `RECORD_LEFTOVER` | Staff | `leftover_records` | ไม่ | น้ำหนักเป็นกรัม, ค่าปรับที่คำนวณได้ |
 | **ปรับยอดสต็อก** (อนุมัติผลนับ) | `ADJUST_STOCK_COUNT` | Manager (Admin Emergency) | `stock_counts` | Admin **ใช่** | ยอดระบบ, ยอดนับจริง, ผลต่าง (ปรับยอดตามผลต่าง) |
+| **แก้ราคาบุฟเฟต์ / VAT** | `UPDATE_PACKAGE` | Admin | `packages` (+ `app_settings.vat_rate_percent`) | ไม่ | เฉพาะค่าที่เปลี่ยน ก่อน/หลัง (ชื่อ, ราคาผู้ใหญ่/เด็ก, เวลา, VAT) |
+| **เพิ่มพนักงาน** | `CREATE_STAFF` | Admin | `profiles` | ไม่ | ชื่อ, อีเมล, ตำแหน่ง, มี PIN หรือไม่ (ไม่เก็บรหัสผ่าน/PIN) |
+| **แก้ข้อมูลพนักงาน** | `UPDATE_STAFF` | Admin | `profiles` | ไม่ | ชื่อ/ตำแหน่ง/สถานะเปิดใช้งาน ก่อน/หลัง หรือ "ตั้งรหัสผ่านใหม่" / "ตั้ง PIN ใหม่" / "ล้าง PIN" |
 | **Emergency Override** | `EMERGENCY_OVERRIDE` | Admin | Any (เช่น `ingredients` ปรับยอดฉุกเฉิน, `stock_counts` อนุมัติแทน) | **ใช่** | เหตุจำเป็นที่ต้องทำแทน Manager, ยอดก่อน/หลัง |
 
 ---
@@ -64,6 +67,9 @@
 | 17 | **ดูรายงานยอดขาย** | `Manager`, `Admin` | |
 | 18 | **ดู Audit Log** | `Admin` (เต็มสิทธิ์), `Manager` (ตามสิทธิ์) | Manager ไม่เห็นรายการที่ Admin เป็นผู้ทำ (RLS migration 024) |
 | 19 | **แก้สูตร BOM / เพิ่ม-แก้วัตถุดิบ** | `Manager`, `Admin` | ยอดคงเหลือแก้ตรงไม่ได้ (migration 024) |
+| 20 | **เพิ่ม/แก้หมวดหมู่เมนู** | `Manager`, `Admin` | policy `manager_manage_categories` (migration 025) |
+| 21 | **อัปโหลด/ลบรูปเมนู** | `Manager`, `Admin` | Storage bucket `menu-images` — ทุกคน (รวมลูกค้า) ดูรูปได้ (migration 025) |
+| 22 | **สร้างบัญชี / ตั้งรหัสผ่าน / ตั้ง PIN** | `Admin` | ทำฝั่งเซิร์ฟเวอร์ด้วย Service Role Key เท่านั้น — `pin_hash` ไม่ถูกส่งไปหน้าเว็บ |
 
 > **หมายเหตุสำหรับลูกค้า:** ลูกค้า (ไม่ต้องล็อกอิน) ดูคิวตัวเอง ดูสถานะอาหารของโต๊ะตัวเอง และเรียกพนักงานได้เท่านั้น
 

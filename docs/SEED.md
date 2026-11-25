@@ -25,6 +25,8 @@
 | [`supabase/migrations/022_staff_stock_counting.sql`](../supabase/migrations/022_staff_stock_counting.sql) | นับสต็อกเช้า-เย็นโดย Staff (ไม่เห็นยอด) + `stock_counts.count_round` + รับของเข้า/ของเสีย + Manager อนุมัติ/ปฏิเสธ + Realtime สต็อก | ✅ รันซ้ำได้ ไม่ลบข้อมูล (ผลนับเดิมถือเป็นรอบปิดร้าน) |
 | [`supabase/migrations/023_kitchen_read_sessions.sql`](../supabase/migrations/023_kitchen_read_sessions.sql) | ให้ `kitchen` อ่าน `sessions` / `session_tables` (จอครัวหาเลขโต๊ะ) | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
 | [`supabase/migrations/024_inventory_reports_audit.sql`](../supabase/migrations/024_inventory_reports_audit.sql) | FR-024 ปิด/เปิดเมนูอัตโนมัติตามสต็อก, Manager แก้สูตร BOM ได้, Admin ปรับยอดฉุกเฉิน (`fn_emergency_adjust_stock`), Manager ไม่เห็น Audit Log ของ Admin | ✅ รันซ้ำได้ (ปรับสถานะเมนูให้ตรงสต็อกทันทีที่รัน) |
+| [`supabase/migrations/025_menu_packages_staff.sql`](../supabase/migrations/025_menu_packages_staff.sql) | T-10: `menu_items.max_quantity_per_order`, Manager แก้หมวดหมู่ได้, Storage bucket `menu-images` + สิทธิ์อัปโหลด | ✅ รันซ้ำได้ ไม่แก้ข้อมูลเดิม |
+| [`supabase/seed_kitchen_test.sql`](../supabase/seed_kitchen_test.sql) | ข้อมูลทดสอบจอครัว: ออเดอร์ "รอทำ" 3 ใบ (สั่ง 1 / 10 / 18 นาทีที่แล้ว) ถ้าไม่มีโต๊ะที่มีลูกค้าจะเปิดรอบทดสอบให้ 3 โต๊ะ | ✅ เพิ่มอย่างเดียว ไม่ลบของเดิม ไม่ตัดสต็อก · ลบได้ด้วย `DELETE FROM orders WHERE order_number LIKE 'TEST-%'` |
 | [`supabase/seed_master.sql`](../supabase/seed_master.sql) | ข้อมูลหลัก: ตั้งค่า VAT/ค่าปรับ, แพ็กเกจ, โต๊ะ T01-T08, หมวด, วัตถุดิบ, เมนู, ตัวเลือก, BOM, อัตราใช้ต่อหัว | ✅ รันซ้ำ = รีเซ็ตข้อมูลหลักกลับค่าตั้งต้น (ยกเว้นสถานะโต๊ะ) |
 | [`supabase/seed_demo.sql`](../supabase/seed_demo.sql) | ล้างข้อมูลการใช้งาน แล้วใส่ข้อมูลจำลอง (คิว, 3 โต๊ะกำลังใช้งาน, ออเดอร์, บิล, ประวัติ 7 วัน ฯลฯ) | ✅ ทั้งไฟล์อยู่ใน Transaction เดียว ผิดพลาดตรงไหน ROLLBACK ทั้งหมด |
 
@@ -34,10 +36,11 @@
 
 | ลำดับ | ทำอะไร | ที่ไหน |
 |:---:|---|---|
-| 0 | `supabase/migrations/002_v18_fixes.sql` → `003_queue_guests_tax_invoice.sql` → `004_protect_profiles.sql` → `005_table_session_functions.sql` → `006_queue_functions.sql` → `007_billing_functions.sql` → `008_settings_receipt_messages.sql` → `020_kitchen_cancel_return_and_audit.sql` → `021_fix_cancel_return_actor.sql` → `022_staff_stock_counting.sql` → `023_kitchen_read_sessions.sql` → `024_inventory_reports_audit.sql` (แก้ schema ครั้งเดียว หลัง `001_initial_schema.sql`) | SQL Editor |
+| 0 | `supabase/migrations/002_v18_fixes.sql` → `003_queue_guests_tax_invoice.sql` → `004_protect_profiles.sql` → `005_table_session_functions.sql` → `006_queue_functions.sql` → `007_billing_functions.sql` → `008_settings_receipt_messages.sql` → `020_kitchen_cancel_return_and_audit.sql` → `021_fix_cancel_return_actor.sql` → `022_staff_stock_counting.sql` → `023_kitchen_read_sessions.sql` → `024_inventory_reports_audit.sql` → `025_menu_packages_staff.sql` (แก้ schema ครั้งเดียว หลัง `001_initial_schema.sql`) | SQL Editor |
 | 1 | สร้างบัญชีทดสอบ 5 ตำแหน่ง — เลือก **วิธี A** หรือ **วิธี B** ด้านล่าง | Dashboard / Terminal |
 | 2 | `supabase/seed_master.sql` | SQL Editor |
 | 3 | `supabase/seed_demo.sql` (เฉพาะฐานข้อมูลพัฒนา/ทดสอบ) | SQL Editor |
+| 4 | (ไม่บังคับ) `supabase/seed_kitchen_test.sql` — เพิ่มออเดอร์ทดสอบจอครัวได้ทุกเมื่อ ไม่ลบข้อมูลเดิม | SQL Editor |
 
 **วิธีรันไฟล์ใน SQL Editor:** เปิดไฟล์ใน VS Code → `Ctrl+A` → `Ctrl+C` → Supabase Dashboard → **SQL Editor** → **New query** → วาง → **Run**
 (หรือใช้ psql: `psql "<connection string>" -f <ไฟล์>`)

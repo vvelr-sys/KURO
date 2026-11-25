@@ -150,11 +150,12 @@
 |---|---|---|---|---|
 | `category_id` | UUID | NO | - | FK $\rightarrow$ `categories.id` |
 | `name` | VARCHAR(150) | NO | - | ชื่อเมนูอาหาร |
-| `image_url` | TEXT | YES | - | รูปภาพอาหาร |
+| `image_url` | TEXT | YES | - | รูปภาพอาหาร — URL สาธารณะของไฟล์ใน Storage bucket `menu-images` (migration 025) |
 | `extra_price` | NUMERIC(10,2) | NO | 0.00 | ราคาคิดเงินเพิ่มสำหรับเมนูนอกบุฟเฟต์ |
 | `kitchen_station` | VARCHAR(30) | NO | `'hot_kitchen'` | สถานี KDS: `fresh`, `beverage`, `grill`, `hot_kitchen` |
 | `availability_status`| VARCHAR(20)| NO | `'available'` | สถานะ: `available`, `out_of_stock`, `manual_off` |
 | `disabled_reason` | TEXT | YES | - | เหตุผลที่ปิดการจำหน่าย |
+| `max_quantity_per_order` | INT | YES | - | จำนวนสูงสุดต่อการกดสั่ง 1 ครั้ง (1-99) · NULL = ไม่จำกัด (migration 025) |
 
 ### 3.3 `package_menu_items` (จับคู่เมนูในแพ็กเกจ)
 * **PK:** (`package_id`, `menu_item_id`)

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { CircleCheck, CircleOff, LayoutGrid, PackageX, RefreshCw, Search } from 'lucide-react';
-import { AlertMessage, Button, Modal } from '@/components/ui';
+import { AlertMessage, Button, MenuImage, Modal } from '@/components/ui';
 import { getMenuItemsWithAvailability, toggleMenuAvailability } from '@/app/(kitchen)/stock-override/actions';
 import { useKitchenRealtime } from '@/hooks/useKitchenRealtime';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -65,7 +65,8 @@ const MenuItemCard = React.memo(function MenuItemCard({ item, isPending, onToggl
   const isAvailable = item.availability_status === 'available';
 
   return (
-    <article className={cn('flex items-center gap-4 rounded-3xl bg-white p-4 shadow-sm', !isAvailable && 'ring-1 ring-danger-soft')}>
+    <article className={cn('flex items-center gap-4 rounded-3xl bg-white p-3 shadow-sm', !isAvailable && 'ring-1 ring-danger-soft')}>
+      <MenuImage src={item.image_url} className="size-20" isDimmed={!isAvailable} />
       <div className="min-w-0 flex-1">
         <p className={cn('truncate text-lg font-bold', !isAvailable && 'text-ink-muted')} title={item.name}>
           {item.name}
