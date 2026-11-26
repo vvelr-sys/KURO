@@ -92,17 +92,18 @@ KURO/
 │   │   │   ├── tables/                # 2.2 ผังโต๊ะ (Cashier, Staff, Manager, Admin)
 │   │   │   ├── billing/               # 2.3 คิดเงินและชำระเงิน (Cashier, Manager, Admin)
 │   │   │   │   └── tax-invoice/       # 2.4 พิมพ์ใบเสร็จ / ใบกำกับภาษีเต็มรูป (Cashier, Manager, Admin)
-│   │   │   └── service-requests/      # 2.5 แจ้งเตือนเรียกพนักงาน Realtime (Staff, Manager, Admin)
+│   │   │   ├── service-requests/      # 2.5 แจ้งเตือนเรียกพนักงาน Realtime (Staff, Manager, Admin)
+│   │   │   └── stock-count/           # 2.6 นับสต็อกเช้า-เย็น, รับของเข้า, ของเสีย (Staff, Manager, Admin)
 │   │   │
-│   │   ├── (kitchen)/                 # ═══ กลุ่ม: ครัว KDS (จอใหญ่/Tablet) ═══
+│   │   ├── (kitchen)/                 # ═══ กลุ่ม: ครัว KDS (จอใหญ่/Tablet) — layout ใช้ StaffShell ═══
 │   │   │   ├── kds/                   # 3.1 KDS แยกสถานี (Kitchen, Manager, Admin)
 │   │   │   └── stock-override/        # 3.2 Override เปิด/ปิดเมนูด้วยตนเอง (Kitchen, Manager, Admin)
 │   │   │
 │   │   ├── (admin)/                   # ═══ กลุ่ม: หลังบ้าน (Desktop) ═══
 │   │   │   ├── menu/                  # 4.2 จัดการเมนู + สูตรตัดสต็อก BOM (Manager, Admin)
 │   │   │   ├── packages/              # 4.3 ตั้งค่าราคาบุฟเฟต์ + VAT (Admin เท่านั้น)
-│   │   │   ├── inventory/             # 4.4 จัดการสต็อก (Manager; Admin เฉพาะ Emergency)
-│   │   │   ├── reports/               # 4.5 รายงานยอดขาย (Manager, Admin)
+│   │   │   ├── inventory/             # 4.4 สต็อก: แท็บภาพรวมวันนี้ / วัตถุดิบ / สูตร BOM / ประวัติ (Manager; Admin เฉพาะ Emergency)
+│   │   │   ├── reports/               # 4.5 รายงานยอดขาย + ส่งออก CSV / พิมพ์ PDF (Manager, Admin)
 │   │   │   ├── staff/                 # 4.6 จัดการพนักงานและสิทธิ์ (Admin เท่านั้น)
 │   │   │   ├── audit-logs/            # 4.7 ประวัติการทำงาน Audit Log (Admin เต็มสิทธิ์, Manager ตามสิทธิ์)
 │   │   │   └── settings/              # 4.8 ตั้งค่าร้านค้า (Admin เท่านั้น)
@@ -117,22 +118,32 @@ KURO/
 │   │   ├── globals.css                # Tailwind CSS v4
 │   │   └── layout.js                  # Root Layout
 │   │
-│   ├── hooks/                         # Custom Hooks: useKitchenRealtime, useAudioAlert, useDebounce
+│   ├── hooks/                         # Custom Hooks: useKitchenRealtime, useAudioAlert, useStockRealtime, useDebounce, useStoredToggle, useRealtimeRefresh
 │   │
 │   ├── components/
 │   │   ├── ui/                        # Reusable UI: Buttons, Modals, Badges, Cards
 │   │   ├── customer/                  # Customer: MenuCard, OrderCart, Timer
 │   │   ├── pos/                       # POS: TableMap, QueueList, BillingForm
-│   │   └── kitchen/                   # Kitchen: OrderTicketCard, ConsolidatedPrepList, StationFilter, index.js
+│   │   ├── kitchen/                   # Kitchen: KdsScreen, StockOverrideScreen, OrderTicketCard, ConsolidatedPrepList, StationFilter, KitchenGuideModal, index.js
+│   │   ├── reports/                   # Reports: ReportsScreen, SalesBarChart, AuditLogScreen, index.js
+│   │   └── stock/                     # Stock: InventoryWorkspace, IngredientManager, BomEditor, MovementHistory, StockCountScreen, StockCountSheet, StockMovementForm, InventoryScreen, PendingCountList, StockSummaryTable, StockLineChart, index.js
 │   │
 │   └── lib/
 │       ├── supabase/                  # client.js, server.js, admin.js
 │       ├── utils.js                   # cn(), formatCurrency(), calcVAT(), calcPenalty()
+│       ├── auth/                      # requireRole() (หน้า), checkActionRole() (Server Action), getCurrentStaff()
+│       ├── stock.js                   # คำนวณสรุปสต็อกรายวัน/จุดกราฟ (ใช้ร่วม Server/Client)
 │       └── constants/                 # index.js — Enums, State Values & Route Permissions
 │
 └── supabase/
     └── migrations/
-        └── 001_initial_schema.sql     # Migration สมบูรณ์ (30 ตาราง + RLS + Triggers)
+        ├── 001_initial_schema.sql     # Migration สมบูรณ์ (30 ตาราง + RLS + Triggers)
+        ├── 002–008_*.sql              # แก้ schema v1.8, คิว, โต๊ะ, บิล, ตั้งค่า (ดูรายละเอียดใน docs/SEED.md)
+        ├── 020_kitchen_cancel_return_and_audit.sql  # คืนสต็อกตอนยกเลิกรายการ cooking (ตามยอดที่ตัดจริง)
+        ├── 021_fix_cancel_return_actor.sql          # แก้ผู้ทำรายการของ 020 + SET search_path
+        ├── 022_staff_stock_counting.sql             # นับสต็อกเช้า-เย็นโดย staff + รับของเข้า/ของเสีย + อนุมัติ
+        ├── 023_kitchen_read_sessions.sql            # ให้ kitchen อ่าน sessions/session_tables (จอครัวหาเลขโต๊ะ)
+        └── 024_inventory_reports_audit.sql          # FR-024 ปิด/เปิดเมนูอัตโนมัติ, Manager แก้ BOM, Admin ปรับยอดฉุกเฉิน, สิทธิ์อ่าน Audit Log
 ```
 
 ---
@@ -237,13 +248,14 @@ draft → active → expired → closing → billed → closed
 | `/(pos)/billing` | **2.3 ชำระเงิน** | `cashier`, `manager`, `admin` *(staff ทำไม่ได้)* | สรุปยอด, เพิ่มรายการพิเศษ/ค่าปรับเนื้อเหลือ, กรอกส่วนลด (ระบุเหตุผล), เงินสด/PromptPay/บัตร/Split Payment |
 | `/(pos)/billing/tax-invoice` | **2.4 ใบกำกับภาษี** | `cashier`, `manager`, `admin` | พรีวิวใบเสร็จ, ฟอร์มข้อมูลนิติบุคคล/บุคคล, เลขผู้เสียภาษี 13 หลัก, พิมพ์/อีเมล |
 | `/(pos)/service-requests` | **2.5 แจ้งเตือน** | `staff`, `manager`, `admin` | รายการ Realtime (โต๊ะ+ประเภท+เวลารอ), เสียง/สี, ปุ่มรับเรื่อง/เสร็จ |
+| `/(pos)/stock-count` | **2.6 นับสต็อกเช้า-เย็น** | `staff`, `manager`, `admin` | เลือกรอบ (เปิดร้าน/ปิดร้าน), ใบนับทุกวัตถุดิบ **ไม่แสดงยอดในระบบ**, เตือนนับซ้ำรายการที่ต่างเกิน 10%, ส่งรอ Manager อนุมัติที่ `/inventory`, แท็บรับของเข้า / ของเสีย (ระบุเหตุผล) |
 
 ### 4.3 ฝั่งครัว — KDS (ต้อง Auth: kitchen)
 
 | Route | หน้าจอ | บทบาทที่เข้าถึงได้ | สิ่งที่ต้องมี |
 |---|---|---|---|
-| `/(kitchen)/kds` | **3.1 KDS แยกสถานี + To-Do List เตรียมอาหาร** | `kitchen`, `manager`, `admin` | • เลือกสถานี (ของสด/เครื่องดื่ม/ปิ้งย่าง/ครัวร้อน)<br>• **2 โหมดมุมมอง:**<br>&nbsp;&nbsp;1. **Ticket View (การ์ดตามโต๊ะ):** รายการอาหารแต่ละรายการมี Checklist ติ๊กถูกรายเมนู (`pending` → `cooking` → `served`), ปุ่ม "ทำเสร็จทั้งหมดในบิลนี้", ตัวจับเวลารายบิล + สีเตือนรอนาน<br>&nbsp;&nbsp;2. **Consolidated Prep To-Do View (รายการเตรียมรวม):** รวมจำนวนเมนูที่ต้องเตรียมข้ามทุกโต๊ะ (เช่น หมูสไลซ์ รวม 8 ถาด) ให้ครัวหยิบเตรียมและติ๊กทำเสร็จทีละรายการได้สะดวกรวดเร็ว<br>• เสียงแจ้งเตือน Realtime เมื่อมีออเดอร์ใหม่เข้า<br>• ปุ่มยกเลิกรายการอาหาร (พร้อมระบุเหตุผล) |
-| `/(kitchen)/stock-override` | **3.2 Override เมนูหมด** | `kitchen`, `manager`, `admin` | รายการเมนูพร้อมสวิตช์ `manual_off` / `available` แยกตามหมวดหมู่/สถานี |
+| `/(kitchen)/kds` | **3.1 KDS แยกสถานี + To-Do List เตรียมอาหาร** | `kitchen`, `manager`, `admin` | • เลือกสถานี (ของสด/เครื่องดื่ม/ปิ้งย่าง/ครัวร้อน)<br>• **2 โหมดมุมมอง:**<br>&nbsp;&nbsp;1. **Ticket View (การ์ดตามโต๊ะ):** รายการอาหารแต่ละรายการมี Checklist ติ๊กถูกรายเมนู (`pending` → `cooking` → `served`), ปุ่ม "ทำเสร็จทั้งหมดในบิลนี้", ตัวจับเวลารายบิล + สีเตือนรอนาน<br>&nbsp;&nbsp;2. **Consolidated Prep To-Do View (รายการเตรียมรวม):** รวมจำนวนเมนูที่ต้องเตรียมข้ามทุกโต๊ะ (เช่น หมูสไลซ์ รวม 8 ถาด) ให้ครัวหยิบเตรียมและติ๊กทำเสร็จทีละรายการได้สะดวกรวดเร็ว<br>• เสียงแจ้งเตือน Realtime เมื่อมีออเดอร์ใหม่เข้า (ปุ่มเปิด/ปิดเสียง)<br>• ปุ่มยกเลิกรายการอาหาร (พร้อมระบุเหตุผล)<br>• **แตะ 2 ครั้ง:** แตะแรก = เริ่มทำ (ตัดสต็อก) · แตะสอง = เสิร์ฟแล้ว (ย้อนกลับไม่ได้ — ไม่มี Recall)<br>• หน้าต่าง **"วิธีใช้จอครัว"** เปิดเองครั้งแรกของแต่ละเครื่อง (จำใน localStorage `kuro.kdsGuideSeen`) และเปิดซ้ำได้จากปุ่ม "วิธีใช้" |
+| `/(kitchen)/stock-override` | **3.2 Override เมนูหมด** | `kitchen`, `manager`, `admin` | รายการเมนูพร้อมสวิตช์ `manual_off` / `available` แยกตามหมวดหมู่/สถานี · **ปิดเมนูต้องกรอกเหตุผล** (Audit `MANUAL_OFF_MENU`) · เปิดกลับไม่ต้องใส่เหตุผล · เมนู `out_of_stock` กดสวิตช์ไม่ได้ |
 
 ### 4.4 ฝั่งหลังบ้าน — Desktop (ต้อง Auth: admin, manager)
 
@@ -252,7 +264,7 @@ draft → active → expired → closing → billed → closed
 | `/(auth)/login` | **4.1 Login** | ทุก Role | Email/Password หรือ Staff PIN (bcrypt), Redirect ตาม Role |
 | `/(admin)/menu` | **4.2 จัดการเมนู** | `manager`, `admin` | ชื่อ, รูป, หมวดหมู่, `kitchen_station`, สูตร BOM, เปิด/ปิดขาย, จำกัดจำนวนสั่งต่อรอบ |
 | `/(admin)/packages` | **4.3 ราคา/แพ็กเกจ** | `admin` เท่านั้น | ราคาผู้ใหญ่/เด็ก (ต่ำกว่า 120 ซม.), duration, VAT % (ไม่มี Service Charge) |
-| `/(admin)/inventory` | **4.4 สต็อก** | `manager` (Admin เฉพาะ Emergency) | ของคงเหลือ, Reorder point, รับเข้า, ของเสีย, ตรวจนับสต็อกประจำวัน/อนุมัติปรับยอด |
+| `/(admin)/inventory` | **4.4 สต็อก** | `manager` (Admin เฉพาะ Emergency) | ของคงเหลือ, Reorder point, รับเข้า, ของเสีย, **อนุมัติ/ปฏิเสธผลนับเช้า-เย็นของ staff** (ปรับยอดตามผลต่าง), **ตารางสรุปสต็อกวันนี้ + กราฟเส้นคลื่นเรียลไทม์** (เลือกวัตถุดิบที่หมด/ต้องซื้อให้อัตโนมัติ, สัญลักษณ์รับเข้า/ของเสีย/ปรับยอด) |
 | `/(admin)/reports` | **4.5 รายงาน** | `manager`, `admin` | ยอดขายวัน/เดือน, เมนูขายดี, จำนวนลูกค้า, Export Excel/PDF |
 | `/(admin)/staff` | **4.6 พนักงาน** | `admin` เท่านั้น | เพิ่ม/แก้ไข/ปิดใช้งาน, กำหนด Role (Staff PIN bcrypt) |
 | `/(admin)/audit-logs` | **4.7 Audit** | `admin` (เต็มสิทธิ์), `manager` (ตามสิทธิ์) | ค้นหา/กรองประวัติ (ใคร ทำอะไร เมื่อไหร่ เหตุผล) |
@@ -375,6 +387,8 @@ export const calcBuffetTotal = (session) =>
 | `order-items:{sessionId}` | หน้าลูกค้า + KDS | `INSERT/UPDATE` บน `order_items` |
 | `queue-updates` | หน้าคิวลูกค้า + พนักงาน | `UPDATE` บน `queues` |
 | `service-requests` | พนักงาน + ลูกค้า | `INSERT/UPDATE` บน `service_requests` |
+| `kitchen-all-stations` / `kitchen-station-{station}` | จอครัว, หน้าเปิด/ปิดเมนู | `*` บน `order_items`, `UPDATE` บน `menu_items` |
+| `stock-updates` | หน้าสต็อก `/inventory` (Manager/Admin) | `INSERT` บน `stock_movements`, `*` บน `stock_counts` (รวมสัญญาณที่มาติดกันเป็นโหลดครั้งเดียว 800ms) |
 
 ---
 
@@ -440,7 +454,7 @@ export const calcBuffetTotal = (session) =>
 
 ---
 
-## ส่วนที่ 10 — ข้อตัดสินใจทางสถาปัตยกรรม (อัปเดต 18 พฤศจิกายน 2026)
+## ส่วนที่ 10 — ข้อตัดสินใจทางสถาปัตยกรรม (อัปเดต 25 พฤศจิกายน 2026)
 
 > ยึดตามข้อสรุปการทบทวนเอกสารและมติระบบ v1.8 (Single Source of Truth)
 
@@ -457,3 +471,15 @@ export const calcBuffetTotal = (session) =>
 | **การให้ส่วนลด** | `cashier`, `manager`, `admin` กรอกได้เอง | ต้องระบุเหตุผลและบันทึกลงใน Audit Log เสมอ |
 | **อายุ QR Token** | เพิกถอนตอน Session สถานะ `closed` เท่านั้น | `is_revoked = true` โดย Trigger เมื่อ Session ปิดรอบ ช่วง `expired` ยังดูสถานะและสรุปรายการได้ |
 | **Split Payment** | บันทึกแยกรายการชำระเงินหลายรูปแบบได้ | ตาราง `payments` ปลด UNIQUE บน `bill_id` เพื่อรองรับหลายแถวต่อ 1 บิล และตรวจ `SUM(amount) = bills.total_amount` |
+| **นับสต็อกเช้า-เย็น** (25 พ.ย. 2026) | `staff` เป็นผู้นับ วันละ 2 รอบ (`opening` / `closing`) แบบไม่เห็นยอดในระบบ + รับของเข้า / ของเสีย — Manager อนุมัติ (FR-064) | ทำผ่านฟังก์ชัน SECURITY DEFINER ใน migration 022 (staff ไม่ได้สิทธิ์อ่านตารางสต็อกตรง) · `system_stock` บันทึกโดยฐานข้อมูลตอนส่ง · ตอนอนุมัติปรับยอดตามผลต่าง ไม่ตั้งยอดเท่ากับที่นับ |
+| **จอครัว: แตะเลื่อนสถานะ** (25 พ.ย. 2026) | แตะ 2 ครั้ง `pending → cooking → served` · `served` เป็นสถานะสุดท้าย ไม่มีปุ่ม Recall/ย้อนกลับ (FR-049) | Server Action ตรวจลำดับสถานะ + อัปเดตแบบมีเงื่อนไขสถานะเดิม (กันกดพร้อมกันหลายจอ) · การติ๊กใน "รวมรายการเตรียม" เป็นตัวช่วยจำเท่านั้น ไม่เปลี่ยนสถานะจริง |
+| **คืนสต็อกเมื่อยกเลิก `cooking`** (25 พ.ย. 2026) | คืนตาม "ยอดที่ถูกตัดจริง" ใน `stock_movements` (ไม่คำนวณจากสูตร BOM ปัจจุบัน) | Trigger `fn_return_stock_on_cancel` (migration 020 + 021, SECURITY DEFINER) — ครัวไม่ต้องมีสิทธิ์แก้ตารางสต็อก |
+| **ปิดเมนูด้วยมือ** (25 พ.ย. 2026) | ต้องกรอกเหตุผลทุกครั้ง · เปิดกลับไม่ต้อง · เมนู `out_of_stock` เปิด/ปิดด้วยมือไม่ได้ | ตรวจทั้งหน้าจอและ Server Action · Audit `MANUAL_OFF_MENU` เก็บเหตุผล, ชื่อเมนู, สถานะก่อน/หลัง |
+| **สิทธิ์อ่านของครัว** (25 พ.ย. 2026) | `kitchen` อ่าน `sessions` / `session_tables` ได้ (อ่านอย่างเดียว) | migration 023 — จอครัวต้องใช้หาเลขโต๊ะ (เดิม RLS ไม่ให้ จอครัวว่างเมื่อล็อกอินเป็น kitchen) |
+| **หน้าครัวใช้โครงหน้าเดียวกับพนักงาน** (25 พ.ย. 2026) | `(kitchen)/layout.js` ใช้ `StaffShell` · ทุกหน้าเรียก `requireRole()` · ทุก Server Action เรียก `checkActionRole()` | ใช้สี/ปุ่ม/หน้าต่างกลาง (`primary`, `Button`, `Modal`, `AlertMessage`) ห้ามใส่สีแบบ hex ตรงๆ |
+| **กราฟสต็อกวันนี้** (25 พ.ย. 2026) | เส้นคลื่น (Monotone Cubic — ไม่พุ่งเกินค่าจริง) + พื้นไล่สี · 1 กราฟ 1 วัตถุดิบ · แกน Y เริ่มที่ 0 · เฉพาะ Manager/Admin | วาดด้วย SVG ไม่ใช้ไลบรารีกราฟ · เริ่มจากยอดนับเปิดร้านที่อนุมัติแล้ว ถ้ายังไม่มีใช้ยอดระบบตอน 00:00 · ไม่มีระบบพยากรณ์/แนะนำจำนวนสั่งซื้อ |
+| **ปิด/เปิดเมนูอัตโนมัติ (FR-024)** (25 พ.ย. 2026) | วัตถุดิบตัวใดในสูตรเหลือ "ไม่พอทำ 1 จาน" → `out_of_stock` · เติมของครบ → `available` เอง · ไม่แตะ `manual_off` | Trigger บน `ingredients.current_stock` และ `menu_ingredients` (migration 024) |
+| **สูตร BOM อยู่ที่หน้าสต็อก** (25 พ.ย. 2026) | แก้สูตรตัดสต็อกที่ `/inventory` แท็บ "สูตรตัดสต็อก (BOM)" (Manager, Admin) | หน้า `/menu` (T-10) ไม่ต้องทำ BOM ซ้ำ ให้ลิงก์มาที่นี่ |
+| **ยอดคงเหลือแก้ตรงไม่ได้** (25 พ.ย. 2026) | หน้าวัตถุดิบแก้ได้แค่ชื่อ/หน่วย/จุดสั่งซื้อ · ยอดเปลี่ยนผ่านรับเข้า/ของเสีย/อนุมัติผลนับ/Admin ปรับฉุกเฉินเท่านั้น | ทุกการเปลี่ยนยอดมีแถวใน `stock_movements` · ปรับฉุกเฉินใช้ `fn_emergency_adjust_stock` + Audit `EMERGENCY_OVERRIDE` |
+| **รายงานยอดขาย** (25 พ.ย. 2026) | นับเฉพาะบิล `paid` ตามเวลาชำระ (เวลาไทย) · ช่วงเกิน 62 วันรวมเป็นรายเดือน · เมนูขายดีนับจานที่ไม่ถูกยกเลิก | Export = CSV (มี BOM เปิดด้วย Excel ได้) + พิมพ์/บันทึก PDF ผ่าน `PrintPortal` ไม่ลง package เพิ่ม |
+| **สิทธิ์ดู Audit Log** (25 พ.ย. 2026) | Admin เห็นทั้งหมด · Manager เห็นทั้งหมดยกเว้นรายการที่ Admin เป็นผู้ทำ | บังคับใน RLS (`fn_is_admin_profile`, migration 024) |

@@ -1,13 +1,23 @@
 import { Suspense } from 'react';
-import { ComingSoonPage, PageSkeleton } from '@/components/layout';
+import { AuditLogScreen } from '@/components/reports';
+import { PageSkeleton } from '@/components/layout';
+import { requireRole } from '@/lib/auth';
+import { getAuditActors, getAuditLogs } from './actions';
 
 export const metadata = { title: 'ประวัติการทำงาน | KURO SHABU POS' };
 
-// หน้าชั่วคราว — แทนที่ทั้งไฟล์เมื่อเริ่มทำหน้าจริง (ต้องเรียก requireRole('/audit-logs') ในหน้าใหม่)
+/**
+ * หน้า 4.7 ประวัติการทำงาน Audit Log (admin เต็มสิทธิ์, manager ไม่เห็นรายการของ admin)
+ */
 export default function AuditLogsPage() {
   return (
     <Suspense fallback={<PageSkeleton />}>
-      <ComingSoonPage path="/audit-logs" title="ประวัติการทำงาน" />
+      <AuditLogsContent />
     </Suspense>
   );
+}
+
+async function AuditLogsContent() {
+  const staff = await requireRole('/audit-logs');
+  return <AuditLogScreen staffRole={staff.role} loadActorsAction={getAuditActors} loadLogsAction={getAuditLogs} />;
 }

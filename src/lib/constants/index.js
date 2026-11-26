@@ -64,6 +64,62 @@ export const PAYMENT_METHODS = {
 
 export const PENALTY_RATE_PER_100G = 100.00;
 
+// รอบการตรวจนับสต็อก (stock_counts.count_round — migration 022)
+export const STOCK_COUNT_ROUNDS = {
+  OPENING: 'opening',   // ก่อนเปิดร้าน (เช้า)
+  CLOSING: 'closing',   // หลังปิดร้าน (เย็น)
+};
+
+export const STOCK_COUNT_ROUND_LABELS = {
+  opening: 'รอบเปิดร้าน',
+  closing: 'รอบปิดร้าน',
+};
+
+// สถานะผลตรวจนับ (stock_counts.status)
+export const STOCK_COUNT_STATUS = {
+  PENDING_REVIEW: 'pending_review', // รอผู้จัดการอนุมัติ
+  APPROVED: 'approved',             // อนุมัติแล้ว (ปรับยอดแล้ว)
+  REJECTED: 'rejected',             // ปฏิเสธ (นับใหม่ได้)
+};
+
+// ประเภทความเคลื่อนไหวสต็อก (stock_movements.movement_type)
+export const STOCK_MOVEMENT_TYPES = {
+  ACTUAL_CONSUMPTION: 'actual_consumption',         // ครัวกด cooking ตัดตาม BOM
+  CANCEL_RETURN: 'cancel_return',                   // คืนสต็อกเมื่อยกเลิกรายการที่กำลังทำ
+  MANUAL_RESTOCK: 'manual_restock',                 // รับของเข้า
+  KITCHEN_WASTE: 'kitchen_waste',                   // ของเสีย
+  STOCK_COUNT_ADJUSTMENT: 'stock_count_adjustment', // ปรับยอดจากการตรวจนับ
+};
+
+// ชื่อเหตุการณ์ใน audit_logs.action (audit_matrix.md ส่วนที่ 1) — ที่ไม่อยู่ในรายการแสดงรหัสเดิม
+export const AUDIT_ACTION_LABELS = {
+  OPEN_SESSION: 'เปิดโต๊ะ/รอบบริการ',
+  MOVE_TABLE: 'ย้ายโต๊ะ',
+  TRANSFER_TABLE: 'ย้ายโต๊ะ',
+  MERGE_TABLES: 'รวมโต๊ะ',
+  SPLIT_TABLES: 'แยกโต๊ะ',
+  ENABLE_TABLE: 'เปิดใช้งานโต๊ะ',
+  DISABLE_TABLE: 'ปิดใช้งานโต๊ะ',
+  CANCEL_ORDER_ITEM: 'ยกเลิกรายการอาหาร',
+  MANUAL_OFF_MENU: 'ปิดเมนูด้วยมือ',
+  APPROVE_DISCOUNT: 'ให้ส่วนลด',
+  REMOVE_DISCOUNT: 'ยกเลิกส่วนลด',
+  RECORD_LEFTOVER: 'ชั่งเนื้อเหลือ',
+  SUBMIT_STOCK_COUNT: 'ส่งผลนับสต็อก',
+  ADJUST_STOCK_COUNT: 'อนุมัติผลนับ/ปรับยอด',
+  REJECT_STOCK_COUNT: 'ปฏิเสธผลนับ',
+  UPDATE_SETTINGS: 'แก้ตั้งค่าร้าน',
+  EMERGENCY_OVERRIDE: 'แอดมินทำแทน (ฉุกเฉิน)',
+};
+
+export const STOCK_MOVEMENT_LABELS = {
+  actual_consumption: 'ครัวใช้',
+  cancel_return: 'คืนจากการยกเลิก',
+  manual_restock: 'รับของเข้า',
+  kitchen_waste: 'ของเสีย',
+  stock_count_adjustment: 'ปรับยอดตรวจนับ',
+};
+
 /**
  * Route access permissions per role (Item 12: Route -> Allowed Roles)
  * Server-side & layout checks enforce these without "Admin passes everything" rule
@@ -74,6 +130,7 @@ export const ROUTE_PERMISSIONS = {
   '/billing': ['cashier', 'manager', 'admin'],
   '/billing/tax-invoice': ['cashier', 'manager', 'admin'],
   '/service-requests': ['staff', 'manager', 'admin'],
+  '/stock-count': ['staff', 'manager', 'admin'],      // นับสต็อกเช้า-เย็น, รับของเข้า, ของเสีย
   '/kds': ['kitchen', 'manager', 'admin'],
   '/stock-override': ['kitchen', 'manager', 'admin'],
   '/menu': ['manager', 'admin'],

@@ -339,14 +339,15 @@
 | `reason` | TEXT | YES | - | เหตุผลประกอบ |
 | `created_by` | UUID | NO | - | FK $\rightarrow$ `profiles.id` (ผู้บันทึก) |
 
-### 6.3 `stock_counts` (รอบการตรวจนับสต็อกประจำวันหลังปิดร้าน)
+### 6.3 `stock_counts` (รอบการตรวจนับสต็อกประจำวัน — เช้า/เย็น)
 * **PK:** `id` (UUID DEFAULT `gen_random_uuid()`)
 
 | Field | Type | Null | Default | Description & Constraints |
 |---|---|---|---|---|
-| `count_date` | DATE | NO | `CURRENT_DATE` | วันที่ตรวจนับ |
+| `count_date` | DATE | NO | `CURRENT_DATE` | วันที่ตรวจนับ (ใช้วันตามเวลาไทย `fn_bangkok_today()`) |
+| `count_round` | VARCHAR(10) | NO | `'closing'` | รอบการนับ: `opening` (ก่อนเปิดร้าน), `closing` (หลังปิดร้าน) — migration 022 · 1 วัน 1 รอบ (`UNIQUE (count_date, count_round) WHERE status <> 'rejected'`) |
 | `status` | VARCHAR(20) | NO | `'pending_review'` | สถานะ: `pending_review`, `approved`, `rejected` |
-| `counted_by` | UUID | NO | - | FK $\rightarrow$ `profiles.id` (Manager ผู้ตรวจนับ) |
+| `counted_by` | UUID | NO | - | FK $\rightarrow$ `profiles.id` (Staff ผู้ตรวจนับ — Manager/Admin นับแทนได้) |
 | `approved_by` | UUID | YES | - | FK $\rightarrow$ `profiles.id` (Manager/Admin ผู้อนุมัติ) |
 | `approved_at` | TIMESTAMPTZ | YES | - | เวลาอนุมัติ |
 
