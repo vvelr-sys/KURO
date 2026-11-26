@@ -161,35 +161,37 @@ export default function OrderScreen({ tableNumber, session, categories }) {
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-md flex-col">
-      {/* หัวหน้า: โลโก้ + โต๊ะ + เวลา (ติดด้านบนตลอด) */}
-      <header className="sticky top-0 z-20 flex flex-col gap-3 bg-surface/95 px-4 pb-3 pt-3 backdrop-blur">
-        <div className="flex items-center justify-between gap-3">
-          <BrandLogo subtitle={`โต๊ะ ${tableLabel}`} />
-          <OrderTimer expiresAtMs={expiresAtMs} />
-        </div>
-
+      {/* ส่วนบน: โลโก้ + โต๊ะ + แท็บ (เลื่อนหายไปตามจอ ไม่กินพื้นที่ดูเมนู) */}
+      <header className="flex flex-col gap-3 px-4 pt-3">
+        <BrandLogo subtitle={`โต๊ะ ${tableLabel}`} />
         <CustomerTabs tableNumber={tableNumber} current="order" />
+      </header>
 
-        <label className="relative block">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-ink-muted" aria-hidden />
-          <input
-            type="search"
-            value={searchText}
-            onChange={(event) => setSearchText(event.target.value)}
-            placeholder="ค้นหาเมนู"
-            className="h-11 w-full rounded-xl border border-line bg-white pl-10 pr-10 outline-none focus:border-primary"
-          />
-          {searchText && (
-            <button
-              type="button"
-              onClick={() => setSearchText('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-ink-muted"
-              aria-label="ล้างคำค้นหา"
-            >
-              <X className="size-4" aria-hidden />
-            </button>
-          )}
-        </label>
+      {/* แถบที่ติดด้านบนตลอด: ค้นหา + เวลาที่เหลือ + หมวดหมู่ (เตี้ยที่สุดเท่าที่ทำได้) */}
+      <div className="sticky top-0 z-20 flex flex-col gap-2 bg-surface/95 px-4 py-2 backdrop-blur">
+        <div className="flex items-center gap-2">
+          <label className="relative block min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted" aria-hidden />
+            <input
+              type="search"
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="ค้นหาเมนู"
+              className="h-10 w-full rounded-xl border border-line bg-white pl-9 pr-9 outline-none focus:border-primary"
+            />
+            {searchText && (
+              <button
+                type="button"
+                onClick={() => setSearchText('')}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-ink-muted"
+                aria-label="ล้างคำค้นหา"
+              >
+                <X className="size-4" aria-hidden />
+              </button>
+            )}
+          </label>
+          <OrderTimer expiresAtMs={expiresAtMs} compact />
+        </div>
 
         {!debouncedSearch && (
           <nav className="-mx-4 flex gap-2 overflow-x-auto px-4" aria-label="หมวดหมู่เมนู">
@@ -199,7 +201,7 @@ export default function OrderScreen({ tableNumber, session, categories }) {
                 type="button"
                 onClick={() => setSelectedCategoryId(category.id)}
                 className={cn(
-                  'shrink-0 rounded-full px-4 py-2 text-sm font-bold',
+                  'shrink-0 rounded-full px-3.5 py-1.5 text-sm font-bold',
                   selectedCategoryId === category.id ? 'bg-primary text-white' : 'bg-white text-ink'
                 )}
               >
@@ -208,9 +210,9 @@ export default function OrderScreen({ tableNumber, session, categories }) {
             ))}
           </nav>
         )}
-      </header>
+      </div>
 
-      <main className="flex flex-1 flex-col gap-4 px-4 pb-28 pt-1">
+      <main className="flex flex-1 flex-col gap-4 px-4 pb-28 pt-2">
         {isLocked && (
           <div role="alert" className="flex items-start gap-3 rounded-2xl bg-danger px-4 py-3 text-white">
             <Lock className="mt-0.5 size-5 shrink-0" aria-hidden />
