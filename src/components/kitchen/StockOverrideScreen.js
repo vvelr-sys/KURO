@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { CircleCheck, CircleOff, LayoutGrid, PackageX, RefreshCw, Search } from 'lucide-react';
-import { AlertMessage, Button, Modal } from '@/components/ui';
+import { AlertMessage, Button, MenuImage, Modal } from '@/components/ui';
 import { getMenuItemsWithAvailability, toggleMenuAvailability } from '@/app/(kitchen)/stock-override/actions';
 import { useKitchenRealtime } from '@/hooks/useKitchenRealtime';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -65,7 +65,8 @@ const MenuItemCard = React.memo(function MenuItemCard({ item, isPending, onToggl
   const isAvailable = item.availability_status === 'available';
 
   return (
-    <article className={cn('flex items-center gap-4 rounded-3xl bg-white p-4 shadow-sm', !isAvailable && 'ring-1 ring-danger-soft')}>
+    <article className={cn('flex items-center gap-4 rounded-3xl bg-white p-3 shadow-sm', !isAvailable && 'ring-1 ring-danger-soft')}>
+      <MenuImage src={item.image_url} className="size-20" isDimmed={!isAvailable} />
       <div className="min-w-0 flex-1">
         <p className={cn('truncate text-lg font-bold', !isAvailable && 'text-ink-muted')} title={item.name}>
           {item.name}
@@ -77,6 +78,11 @@ const MenuItemCard = React.memo(function MenuItemCard({ item, isPending, onToggl
         <span className={cn('mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-xs font-bold', status.className)}>
           {status.label}
         </span>
+        {item.availability_status === 'manual_off' && item.disabled_reason && (
+          <p className="mt-1 truncate text-xs text-danger" title={item.disabled_reason}>
+            เหตุผล: {item.disabled_reason}
+          </p>
+        )}
       </div>
       <AvailabilitySwitch item={item} isPending={isPending} onToggle={onToggle} />
     </article>
@@ -177,7 +183,7 @@ export default function StockOverrideScreen() {
   const applyAvailability = useCallback(async (item, nextStatus, reason = null) => {
     setPageError(null);
     setPendingIds((prev) => new Set(prev).add(item.id));
-    setMenuItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, availability_status: nextStatus } : i)));
+    setMenuItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, availability_status: nextStatus, disabled_reason: nextStatus === 'manual_off' ? reason : null } : i)));
 
     const { success, error } = await toggleMenuAvailability(item.id, nextStatus, reason);
 
@@ -189,7 +195,7 @@ export default function StockOverrideScreen() {
 
     if (!success) {
       setMenuItems((prev) =>
-        prev.map((i) => (i.id === item.id ? { ...i, availability_status: item.availability_status } : i))
+        prev.map((i) => (i.id === item.id ? { ...i, availability_status: item.availability_status, disabled_reason: item.disabled_reason } : i))
       );
       setPageError(`${item.name}: ${error || 'ไม่สามารถอัปเดตสถานะเมนูได้'}`);
     }

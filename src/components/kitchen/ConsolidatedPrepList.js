@@ -16,7 +16,7 @@ const STATION_DISPLAY = {
  * เพื่อให้คนในครัวรู้ว่าต้องเตรียมอาหารชนิดนี้ทั้งหมดกี่จาน
  *
  * @param {Array} orderList - รายการออเดอร์ทั้งหมด
- * @returns {Array<{ menuItemId: string, menuItemName: string, station: string, totalQuantity: number }>}
+ * @returns {Array<{ menuItemId: string, menuItemName: string, station: string, totalQuantity: number, optionCounts: Array<{ label: string, quantity: number }> }>}
  */
 function groupMenuForKitchen(orderList) {
   const summary = {};
@@ -32,14 +32,26 @@ function groupMenuForKitchen(orderList) {
           menuItemName: item.menu_item_name,
           station: item.station,
           totalQuantity: 0,
+          optionQuantities: new Map(),
         };
       }
       summary[menuId].totalQuantity += item.quantity;
+      // แยกยอดตามตัวเลือก เช่น หมูสามชั้น 3 = เผ็ดน้อย 2 + ไม่เผ็ด 1
+      if (item.options?.length > 0) {
+        const label = item.options.join(' + ');
+        const counts = summary[menuId].optionQuantities;
+        counts.set(label, (counts.get(label) ?? 0) + item.quantity);
+      }
     }
   }
 
   // เรียงตามชื่อเมนูภาษาไทย ก-ฮ
-  return Object.values(summary).sort((dishA, dishB) => dishA.menuItemName.localeCompare(dishB.menuItemName, 'th'));
+  return Object.values(summary)
+    .map(({ optionQuantities, ...dish }) => ({
+      ...dish,
+      optionCounts: [...optionQuantities.entries()].map(([label, quantity]) => ({ label, quantity })),
+    }))
+    .sort((dishA, dishB) => dishA.menuItemName.localeCompare(dishB.menuItemName, 'th'));
 }
 
 /**
@@ -120,6 +132,15 @@ const ConsolidatedPrepList = React.memo(function ConsolidatedPrepList({ orders }
                   </span>
                   {STATION_DISPLAY[dish.station] && (
                     <span className="text-sm text-ink-muted">{STATION_DISPLAY[dish.station]}</span>
+                  )}
+                  {dish.optionCounts.length > 0 && (
+                    <span className="mt-1 flex flex-wrap gap-1">
+                      {dish.optionCounts.map((option) => (
+                        <span key={option.label} className="rounded-md bg-amber-100 px-1.5 py-0.5 text-xs font-bold text-amber-900">
+                          {option.label} ×{option.quantity}
+                        </span>
+                      ))}
+                    </span>
                   )}
                 </span>
                 <span

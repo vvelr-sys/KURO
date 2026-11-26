@@ -5,6 +5,7 @@ import { checkActionRole } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { ROUTE_PERMISSIONS } from '@/lib/constants';
 import { buildIngredientDaySummary, getBangkokToday, sortStockRows } from '@/lib/stock';
+import { removeStoredImage, toStoragePath } from '@/lib/storage-image';
 
 // Server Actions ของหน้าสต็อกผู้จัดการ (manager, admin)
 const INVENTORY_ROLES = ROUTE_PERMISSIONS['/inventory'];
@@ -192,31 +193,66 @@ export async function reviewStockCount(stockCountId, approve, reason = null) {
 // ════════════════════════════════════════════════════════════════════════
 
 /**
- * รายการวัตถุดิบทั้งหมด (เรียงตามชื่อ)
- * @returns {Promise<{ ingredients: Array<{ id: string, name: string, unit: string, current_stock: number, minimum_threshold: number }>, error: string|null }>}
+ * รายการวัตถุดิบทั้งหมด (เรียงตามชื่อ) พร้อมเมนูที่ใช้วัตถุดิบนั้นในสูตร BOM
+ * - used_in_menus: เมนูที่ใช้ (สูตรสั้นสุดก่อน) — ว่าง = วัตถุดิบนี้ไม่ถูกตัดสต็อกจากการขายเลย
+ * - display_image_url: รูปวัตถุดิบเอง หรือถ้าไม่มี ใช้รูปเมนูแรกใน used_in_menus ที่มีรูป (กติกาเดียวกับ migration 026)
+ * - image_from_menu: ชื่อเมนูที่ยืมรูปมา (null = รูปของวัตถุดิบเอง / ไม่มีรูป)
+ * @returns {Promise<{ ingredients: Array<object>, error: string|null }>}
  */
 export async function getIngredients() {
   const { error: roleError } = await checkActionRole(INVENTORY_ROLES);
   if (roleError) return { ingredients: [], error: roleError };
 
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from('ingredients')
-    .select('id, name, unit, current_stock, minimum_threshold')
-    .order('name', { ascending: true });
+  const [ingredientResult, bomResult] = await Promise.all([
+    supabase
+      .from('ingredients')
+      .select('id, name, unit, current_stock, minimum_threshold, image_url')
+      .order('name', { ascending: true }),
+    supabase.from('menu_ingredients').select('menu_item_id, ingredient_id, menu_items ( id, name, image_url )'),
+  ]);
 
-  if (error) return { ingredients: [], error: toDisplayError(error, 'inventory ingredients') };
-  return { ingredients: data ?? [], error: null };
+  const firstError = ingredientResult.error ?? bomResult.error;
+  if (firstError) return { ingredients: [], error: toDisplayError(firstError, 'inventory ingredients') };
+
+  // จำนวนวัตถุดิบในสูตรของแต่ละเมนู (ใช้เรียง: เมนูที่ใช้วัตถุดิบน้อยสุดก่อน = รูปตรงกับวัตถุดิบที่สุด)
+  const recipeSizeByMenu = new Map();
+  for (const row of bomResult.data ?? []) {
+    recipeSizeByMenu.set(row.menu_item_id, (recipeSizeByMenu.get(row.menu_item_id) ?? 0) + 1);
+  }
+
+  const ingredients = (ingredientResult.data ?? []).map((ingredient) => {
+    const usedInMenus = (bomResult.data ?? [])
+      .filter((row) => row.ingredient_id === ingredient.id && row.menu_items)
+      .map((row) => ({
+        id: row.menu_items.id,
+        name: row.menu_items.name,
+        image_url: row.menu_items.image_url,
+        recipe_size: recipeSizeByMenu.get(row.menu_item_id) ?? 1,
+      }))
+      // สูตรสั้นสุดก่อน · เท่ากันเรียงตาม id (ให้ตรงกับ fn_ingredients_for_count ใน migration 028)
+      .sort((first, second) => first.recipe_size - second.recipe_size || (first.id < second.id ? -1 : first.id > second.id ? 1 : 0));
+    const imageMenu = ingredient.image_url ? null : usedInMenus.find((menu) => menu.image_url) ?? null;
+
+    return {
+      ...ingredient,
+      used_in_menus: usedInMenus,
+      display_image_url: ingredient.image_url ?? imageMenu?.image_url ?? null,
+      image_from_menu: imageMenu?.name ?? null,
+    };
+  });
+
+  return { ingredients, error: null };
 }
 
 /**
- * เพิ่ม/แก้วัตถุดิบ (ชื่อ, หน่วย, จุดสั่งซื้อ) — ยอดคงเหลือแก้ที่นี่ไม่ได้
+ * เพิ่ม/แก้วัตถุดิบ (ชื่อ, หน่วย, จุดสั่งซื้อ, รูป) — ยอดคงเหลือแก้ที่นี่ไม่ได้
  * ยอดเปลี่ยนได้ผ่าน รับของเข้า / ของเสีย / อนุมัติผลนับ / ปรับฉุกเฉิน (มีประวัติทุกครั้ง)
  *
- * @param {{ id?: string|null, name: string, unit: string, minimumThreshold: number }} input
+ * @param {{ id?: string|null, name: string, unit: string, minimumThreshold: number, imageUrl?: string|null }} input
  * @returns {Promise<{ success: boolean, error: string|null }>}
  */
-export async function saveIngredient({ id = null, name, unit, minimumThreshold }) {
+export async function saveIngredient({ id = null, name, unit, minimumThreshold, imageUrl = null }) {
   const { error: roleError } = await checkActionRole(INVENTORY_ROLES);
   if (roleError) return { success: false, error: roleError };
 
@@ -228,14 +264,24 @@ export async function saveIngredient({ id = null, name, unit, minimumThreshold }
   if (!Number.isFinite(threshold) || threshold < 0) {
     return { success: false, error: 'จุดสั่งซื้อต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป' };
   }
+  const cleanImageUrl = imageUrl || null;
+  if (cleanImageUrl && !toStoragePath(cleanImageUrl)) return { success: false, error: 'รูปต้องอัปโหลดผ่านหน้านี้เท่านั้น' };
 
   const supabase = await createClient();
-  const payload = { name: trimmedName, unit: trimmedUnit, minimum_threshold: threshold };
-  const { error } = id
-    ? await supabase.from('ingredients').update(payload).eq('id', id)
-    : await supabase.from('ingredients').insert({ ...payload, current_stock: 0 });
+  const payload = { name: trimmedName, unit: trimmedUnit, minimum_threshold: threshold, image_url: cleanImageUrl };
 
+  if (!id) {
+    const { error } = await supabase.from('ingredients').insert({ ...payload, current_stock: 0 });
+    if (error) return { success: false, error: toDisplayError(error, 'inventory save ingredient') };
+    return { success: true, error: null };
+  }
+
+  const { data: before } = await supabase.from('ingredients').select('image_url').eq('id', id).maybeSingle();
+  const { error } = await supabase.from('ingredients').update(payload).eq('id', id);
   if (error) return { success: false, error: toDisplayError(error, 'inventory save ingredient') };
+
+  // เปลี่ยน/เอารูปออก → ลบไฟล์เก่าออกจาก Storage
+  if (before?.image_url && before.image_url !== cleanImageUrl) await removeStoredImage(supabase, before.image_url);
   return { success: true, error: null };
 }
 

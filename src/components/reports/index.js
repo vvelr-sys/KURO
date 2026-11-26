@@ -6,3 +6,4 @@
 export { default as ReportsScreen } from './ReportsScreen';
 export { default as SalesBarChart } from './SalesBarChart';
 export { default as AuditLogScreen } from './AuditLogScreen';
+export { default as AuditChangeTable } from './AuditChangeTable';

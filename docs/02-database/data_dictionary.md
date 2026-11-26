@@ -150,13 +150,16 @@
 |---|---|---|---|---|
 | `category_id` | UUID | NO | - | FK $\rightarrow$ `categories.id` |
 | `name` | VARCHAR(150) | NO | - | ชื่อเมนูอาหาร |
-| `image_url` | TEXT | YES | - | รูปภาพอาหาร |
+| `image_url` | TEXT | YES | - | รูปภาพอาหาร — URL สาธารณะของไฟล์ใน Storage bucket `menu-images` (migration 025) |
 | `extra_price` | NUMERIC(10,2) | NO | 0.00 | ราคาคิดเงินเพิ่มสำหรับเมนูนอกบุฟเฟต์ |
 | `kitchen_station` | VARCHAR(30) | NO | `'hot_kitchen'` | สถานี KDS: `fresh`, `beverage`, `grill`, `hot_kitchen` |
 | `availability_status`| VARCHAR(20)| NO | `'available'` | สถานะ: `available`, `out_of_stock`, `manual_off` |
-| `disabled_reason` | TEXT | YES | - | เหตุผลที่ปิดการจำหน่าย |
+| `disabled_reason` | TEXT | YES | - | เหตุผลที่ปิดการจำหน่าย — บันทึกตอนปิดเมนูด้วยมือ (`manual_off`) ล้างเมื่อเปิดกลับ |
+| `max_quantity_per_order` | INT | YES | - | จำนวนสูงสุดต่อการกดสั่ง 1 ครั้ง (1-99) · NULL = ไม่จำกัด (migration 025) |
 
 ### 3.3 `package_menu_items` (จับคู่เมนูในแพ็กเกจ)
+> สถานะ: สำรองไว้ ยังไม่ใช้ในเฟส 1 (ไม่มีหน้าจอ) — ดู AGENTS.md ส่วนที่ 10
+
 * **PK:** (`package_id`, `menu_item_id`)
 
 | Field | Type | Null | Default | Description & Constraints |
@@ -272,6 +275,8 @@
 | `verified_at` | TIMESTAMPTZ | NO | `now()` | เวลาที่ยืนยันชำระเงิน |
 
 ### 5.4 `payment_attempts` (ประวัติการตรวจสลิปไม่ผ่าน/ลองซ้ำ)
+> สถานะ: สำรองไว้ ยังไม่ใช้ในเฟส 1 (ไม่มีหน้าจอ) — ดู AGENTS.md ส่วนที่ 10
+
 * **PK:** `id` (UUID DEFAULT `gen_random_uuid()`)
 
 | Field | Type | Null | Default | Description & Constraints |
@@ -323,6 +328,7 @@
 | `unit` | VARCHAR(20) | NO | - | หน่วยนับ เช่น `g`, `ml`, `piece` |
 | `current_stock` | NUMERIC(12,3) | NO | 0.000 | สต็อกคงเหลือจริง (CHECK `current_stock >= 0`) |
 | `minimum_threshold`| NUMERIC(12,3)| NO | 0.000 | จุดเตือนสต็อกใกล้หมด (Reorder Point) |
+| `image_url` | TEXT | YES | - | รูปวัตถุดิบ — URL ไฟล์ใน Storage bucket `menu-images/ingredients` · แสดงในหน้านับสต็อก (migration 026) |
 
 ### 6.2 `stock_movements` (สมุดบัญชีความเคลื่อนไหวสต็อก)
 * **PK:** `id` (UUID DEFAULT `gen_random_uuid()`)
@@ -364,6 +370,8 @@
 | `adjustment_reason`| TEXT | YES | - | คำชี้แจงสาเหตุของผลต่าง |
 
 ### 6.5 `usage_rates` (อัตราประมาณการบริโภคต่อหัวลูกค้า)
+> สถานะ: สำรองไว้ ยังไม่ใช้ในเฟส 1 (ไม่มีหน้าจอ) — ดู AGENTS.md ส่วนที่ 10
+
 * **PK:** `id` (UUID DEFAULT `gen_random_uuid()`) | **UK:** (`package_id`, `ingredient_id`)
 
 | Field | Type | Null | Default | Description & Constraints |
@@ -374,6 +382,8 @@
 | `estimated_grams_per_child`| NUMERIC(10,2)| NO | 0.00 | ปริมาณประมาณการต่อเด็ก 1 คน (กรัม) |
 
 ### 6.6 `head_usage_estimates` (ประมาณการใช้วัตถุดิบของ Session)
+> สถานะ: สำรองไว้ ยังไม่ใช้ในเฟส 1 (ไม่มีหน้าจอ) — ดู AGENTS.md ส่วนที่ 10
+
 * **PK:** `id` (UUID DEFAULT `gen_random_uuid()`) | **UK:** (`session_id`, `ingredient_id`)
 
 | Field | Type | Null | Default | Description & Constraints |

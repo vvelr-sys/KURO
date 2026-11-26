@@ -5,6 +5,7 @@ import { ChevronDown, Search } from 'lucide-react';
 import { AlertMessage, Button } from '@/components/ui';
 import { AUDIT_ACTION_LABELS, ROLE_LABELS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
+import AuditChangeTable from './AuditChangeTable';
 
 const INPUT_CLASS = 'h-11 rounded-xl border border-line bg-white px-3 outline-none focus:border-primary';
 
@@ -36,7 +37,7 @@ const HIGHLIGHT_ACTIONS = new Set(['EMERGENCY_OVERRIDE', 'APPROVE_DISCOUNT', 'RE
  * @param {object} props
  * @param {string} props.staffRole
  * @param {() => Promise<{ staff: Array, error: string|null }>} props.loadActorsAction
- * @param {(filters: object) => Promise<{ logs: Array, isTruncated: boolean, error: string|null }>} props.loadLogsAction
+ * @param {(filters: object) => Promise<{ logs: Array, nameById: Record<string, string>, isTruncated: boolean, error: string|null }>} props.loadLogsAction
  */
 export default function AuditLogScreen({ staffRole, loadActorsAction, loadLogsAction }) {
   const [actors, setActors] = useState([]);
@@ -48,6 +49,7 @@ export default function AuditLogScreen({ staffRole, loadActorsAction, loadLogsAc
     keyword: '',
   }));
   const [logs, setLogs] = useState([]);
+  const [nameById, setNameById] = useState({});
   const [isTruncated, setIsTruncated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [pageError, setPageError] = useState(null);
@@ -55,6 +57,7 @@ export default function AuditLogScreen({ staffRole, loadActorsAction, loadLogsAc
 
   const applyResult = useCallback((result) => {
     setLogs(result.logs);
+    setNameById(result.nameById ?? {});
     setIsTruncated(result.isTruncated);
     setPageError(result.error);
     setIsLoading(false);
@@ -209,19 +212,7 @@ export default function AuditLogScreen({ staffRole, loadActorsAction, loadLogsAc
                     {isExpanded && (
                       <tr>
                         <td colSpan={5} className="bg-surface px-4 py-3">
-                          <div className="grid gap-3 md:grid-cols-2">
-                            {[
-                              ['ก่อนเปลี่ยน', log.payloadBefore],
-                              ['หลังเปลี่ยน', log.payloadAfter],
-                            ].map(([title, payload]) => (
-                              <div key={title}>
-                                <p className="mb-1 text-xs font-bold text-ink-muted">{title}</p>
-                                <pre className="max-h-60 overflow-auto rounded-xl bg-white p-3 font-mono text-xs">
-                                  {payload ? JSON.stringify(payload, null, 2) : '—'}
-                                </pre>
-                              </div>
-                            ))}
-                          </div>
+                          <AuditChangeTable before={log.payloadBefore} after={log.payloadAfter} nameById={nameById} />
                         </td>
                       </tr>
                     )}

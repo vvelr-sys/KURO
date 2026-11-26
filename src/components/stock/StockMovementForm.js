@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { PackagePlus, Trash2 } from 'lucide-react';
+import { MenuImage } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { STOCK_MOVEMENT_LABELS, STOCK_MOVEMENT_TYPES } from '@/lib/constants';
 import { formatBangkokTime, formatStockNumber } from '@/lib/stock';
@@ -29,7 +30,7 @@ const FORM_SETTINGS = {
  *
  * @param {object} props
  * @param {'manual_restock'|'kitchen_waste'} props.movementType
- * @param {Array<{ id: string, name: string, unit: string }>} props.ingredients
+ * @param {Array<{ id: string, name: string, unit: string, image_url?: string|null }>} props.ingredients
  * @param {(ingredientId: string, movementType: string, quantity: number, reason: string|null) => Promise<{ success: boolean, error: string|null }>} props.onSubmit
  */
 const StockMovementForm = React.memo(function StockMovementForm({ movementType, ingredients, onSubmit }) {
@@ -97,6 +98,13 @@ const StockMovementForm = React.memo(function StockMovementForm({ movementType, 
               </option>
             ))}
           </select>
+          {/* รูปของวัตถุดิบที่เลือก — ช่วยเช็กว่าเลือกถูกตัว */}
+          {selectedIngredient && (
+            <span className="mt-2 flex items-center gap-3 rounded-xl bg-surface p-2">
+              <MenuImage src={selectedIngredient.image_url} alt="" className="size-12 rounded-xl" />
+              <span className="font-semibold">{selectedIngredient.name}</span>
+            </span>
+          )}
         </label>
 
         <label className="block">
