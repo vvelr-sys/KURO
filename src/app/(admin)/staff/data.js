@@ -10,11 +10,10 @@ import { createClient } from '@/lib/supabase/server';
  * @property {string|null} email - null เมื่อยังไม่ได้ตั้ง SUPABASE_SERVICE_ROLE_KEY
  * @property {'admin'|'manager'|'cashier'|'staff'|'kitchen'} role
  * @property {boolean} isActive
- * @property {boolean} hasPin
  * @property {string} createdAt
  */
 
-/** มี Service Role Key ไหม (จำเป็นสำหรับสร้างบัญชี / อ่านอีเมล / ตั้ง PIN) */
+/** มี Service Role Key ไหม (จำเป็นสำหรับสร้างบัญชี / อ่านอีเมล / ตั้งรหัสผ่าน) */
 export function hasServiceRoleKey() {
   return Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
@@ -37,7 +36,7 @@ async function fetchEmailsById(adminClient) {
 }
 
 /**
- * ข้อมูลหน้าพนักงาน: รายชื่อทุกบัญชี (ไม่ส่ง pin_hash ออกไปหน้าเว็บ ส่งแค่ว่ามี PIN หรือยัง)
+ * ข้อมูลหน้าพนักงาน: รายชื่อทุกบัญชี + อีเมล
  * @returns {Promise<{ accounts: StaffAccount[], canManageAccounts: boolean, error: string|null }>}
  */
 export async function getStaffPageData() {
@@ -46,7 +45,7 @@ export async function getStaffPageData() {
 
   try {
     if (!canManageAccounts) {
-      // ไม่มี Service Role Key → อ่านได้แค่ข้อมูลพื้นฐาน (ไม่มีอีเมล / สถานะ PIN)
+      // ไม่มี Service Role Key → อ่านได้แค่ข้อมูลพื้นฐาน (ไม่มีอีเมล)
       const supabase = await createClient();
       const { data, error } = await supabase
         .from('profiles')
@@ -54,7 +53,7 @@ export async function getStaffPageData() {
         .order('created_at', { ascending: true });
       if (error) throw error;
       return {
-        accounts: data.map((row) => toAccount(row, null, false)),
+        accounts: data.map((row) => toAccount(row, null)),
         canManageAccounts,
         error: null,
       };
@@ -62,12 +61,12 @@ export async function getStaffPageData() {
 
     const adminClient = createAdminClient();
     const [{ data, error }, emailsById] = await Promise.all([
-      adminClient.from('profiles').select('id, full_name, role, is_active, created_at, pin_hash').order('created_at', { ascending: true }),
+      adminClient.from('profiles').select('id, full_name, role, is_active, created_at').order('created_at', { ascending: true }),
       fetchEmailsById(adminClient),
     ]);
     if (error) throw error;
     return {
-      accounts: data.map((row) => toAccount(row, emailsById.get(row.id) ?? null, Boolean(row.pin_hash))),
+      accounts: data.map((row) => toAccount(row, emailsById.get(row.id) ?? null)),
       canManageAccounts,
       error: null,
     };
@@ -78,14 +77,13 @@ export async function getStaffPageData() {
 }
 
 /** แปลงแถว profiles เป็นข้อมูลที่หน้าเว็บใช้ */
-function toAccount(row, email, hasPin) {
+function toAccount(row, email) {
   return {
     id: row.id,
     fullName: row.full_name,
     email,
     role: row.role,
     isActive: row.is_active,
-    hasPin,
     createdAt: row.created_at,
   };
 }

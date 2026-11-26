@@ -239,10 +239,16 @@ export async function updateOrderItemStatus(itemId, newStatus, cancelReason = nu
  * จานที่ยัง pending จะผ่าน cooking ก่อนเพื่อให้ตัดสต็อกตาม BOM แล้วจึงเป็น served
  *
  * @param {string} orderId - รหัสบิลออเดอร์
+ * @param {string[]} itemIds - รายการที่เห็นบนการ์ด (ทำเสร็จเฉพาะรายการเหล่านี้)
  */
-export async function markAllServed(orderId) {
+export async function markAllServed(orderId, itemIds) {
   const { error: roleError } = await checkActionRole(KITCHEN_ROLES);
   if (roleError) return { success: false, error: roleError };
+
+  // ทำเสร็จเฉพาะรายการที่เห็นบนการ์ด (ตอนกรองสถานี การ์ดแสดงแค่ของสถานีนั้น
+  // ห้ามไปเสิร์ฟ/ตัดสต็อกรายการของสถานีอื่นในบิลเดียวกันที่ยังไม่ได้ทำ)
+  const targetIds = Array.isArray(itemIds) ? itemIds.filter((id) => typeof id === 'string' && id) : [];
+  if (targetIds.length === 0) return { success: false, error: 'ไม่มีรายการที่ต้องทำในบิลนี้' };
 
   try {
     const supabase = await createClient();
@@ -252,6 +258,7 @@ export async function markAllServed(orderId) {
       .from('order_items')
       .update({ status: 'cooking' })
       .eq('order_id', orderId)
+      .in('id', targetIds)
       .eq('status', 'pending');
 
     if (cookingError) {
@@ -264,6 +271,7 @@ export async function markAllServed(orderId) {
       .from('order_items')
       .update({ status: 'served' })
       .eq('order_id', orderId)
+      .in('id', targetIds)
       .eq('status', 'cooking');
 
     if (error) {

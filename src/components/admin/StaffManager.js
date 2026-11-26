@@ -2,7 +2,7 @@
 
 import { memo, useId, useMemo, useState } from 'react';
 import { KeyRound, Pencil, Plus, Search, ShieldCheck, UserRound, Users } from 'lucide-react';
-import { createStaffAccount, resetStaffPassword, setStaffPin, updateStaffAccount } from '@/app/(admin)/staff/actions';
+import { createStaffAccount, resetStaffPassword, updateStaffAccount } from '@/app/(admin)/staff/actions';
 import { AlertMessage, Button, Modal } from '@/components/ui';
 import { useDebounce } from '@/hooks/useDebounce';
 import { ROLE_LABELS } from '@/lib/constants';
@@ -21,7 +21,7 @@ const ROLE_OPTIONS = [
 ];
 
 /**
- * จัดการพนักงาน: สรุปจำนวนตามตำแหน่ง, ค้นหา, เพิ่ม, แก้ไข, ปิดใช้งาน, ตั้งรหัสผ่าน/PIN
+ * จัดการพนักงาน: สรุปจำนวนตามตำแหน่ง, ค้นหา, เพิ่ม, แก้ไข, ปิดใช้งาน, ตั้งรหัสผ่าน
  * @param {Object} props
  * @param {import('@/app/(admin)/staff/data').StaffAccount[]} props.accounts
  * @param {boolean} props.canManageAccounts - false = ยังไม่มี Service Role Key (ดูได้อย่างเดียว)
@@ -182,11 +182,6 @@ const StaffCard = memo(function StaffCard({ account, isSelf, canEdit, onEdit }) 
           <span className={cn('rounded-full px-2 py-0.5', account.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-line text-ink-muted')}>
             {account.isActive ? 'ใช้งานอยู่' : 'ปิดใช้งาน'}
           </span>
-          {canEdit && (
-            <span className={cn('rounded-full px-2 py-0.5', account.hasPin ? 'bg-surface text-ink' : 'bg-amber-100 text-amber-900')}>
-              {account.hasPin ? 'มี PIN' : 'ยังไม่มี PIN'}
-            </span>
-          )}
         </div>
       </div>
       <Button variant="ghost" size="sm" icon={Pencil} onClick={() => onEdit(account)} disabled={!canEdit} aria-label={`แก้ไข ${account.fullName}`}>
@@ -225,7 +220,7 @@ function RoleSelect({ value, onChange, disabled }) {
 /** หน้าต่างเพิ่มพนักงาน */
 function CreateStaffModal({ onClose, onCreated }) {
   const formId = useId();
-  const [values, setValues] = useState({ fullName: '', email: '', password: '', role: 'staff', pin: '' });
+  const [values, setValues] = useState({ fullName: '', email: '', password: '', role: 'staff' });
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
@@ -276,28 +271,18 @@ function CreateStaffModal({ onClose, onCreated }) {
           <input type="password" value={values.password} onChange={setValue('password')} autoComplete="new-password" className={INPUT_CLASS} />
         </Field>
         <RoleSelect value={values.role} onChange={(role) => setValues((current) => ({ ...current, role }))} />
-        <Field label="PIN (ไม่บังคับ)" hint="ตัวเลข 4 - 6 หลัก เก็บแบบเข้ารหัส ดูย้อนหลังไม่ได้" error={fieldErrors.pin}>
-          <input
-            inputMode="numeric"
-            value={values.pin}
-            onChange={(event) => setValues((current) => ({ ...current, pin: event.target.value.replace(/\D/g, '').slice(0, 6) }))}
-            autoComplete="off"
-            className={cn(INPUT_CLASS, 'max-w-40 font-mono tracking-widest')}
-          />
-        </Field>
         <AlertMessage>{formError}</AlertMessage>
       </form>
     </Modal>
   );
 }
 
-/** หน้าต่างแก้ไขพนักงาน: ข้อมูลทั่วไป + รหัสผ่าน + PIN (บันทึกแยกกันทีละส่วน) */
+/** หน้าต่างแก้ไขพนักงาน: ข้อมูลทั่วไป + รหัสผ่าน (บันทึกแยกกันทีละส่วน) */
 function EditStaffModal({ account, isSelf, onClose, onSaved }) {
   const [fullName, setFullName] = useState(account.fullName);
   const [role, setRole] = useState(account.role);
   const [isActive, setIsActive] = useState(account.isActive);
   const [newPassword, setNewPassword] = useState('');
-  const [newPin, setNewPin] = useState('');
   const [busyPart, setBusyPart] = useState(null);
   const [formError, setFormError] = useState(null);
 
@@ -372,38 +357,6 @@ function EditStaffModal({ account, isSelf, onClose, onSaved }) {
           </div>
         </section>
 
-        <section className="flex flex-col gap-3 border-t border-line pt-4">
-          <p className="font-bold">PIN {account.hasPin ? '(ตั้งไว้แล้ว)' : '(ยังไม่มี)'}</p>
-          <div className="flex flex-wrap gap-2">
-            <input
-              inputMode="numeric"
-              value={newPin}
-              onChange={(event) => setNewPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="4 - 6 หลัก"
-              autoComplete="off"
-              aria-label="PIN ใหม่"
-              className={cn(INPUT_CLASS, 'max-w-40 font-mono tracking-widest')}
-            />
-            <Button
-              variant="secondary"
-              isLoading={busyPart === 'pin'}
-              disabled={busyPart !== null || newPin.length === 0}
-              onClick={() => run('pin', () => setStaffPin({ id: account.id, pin: newPin }), `ตั้ง PIN ให้ ${account.fullName} แล้ว`)}
-            >
-              ตั้ง PIN
-            </Button>
-            {account.hasPin && (
-              <Button
-                variant="danger"
-                isLoading={busyPart === 'clearPin'}
-                disabled={busyPart !== null}
-                onClick={() => run('clearPin', () => setStaffPin({ id: account.id, pin: null }), `ล้าง PIN ของ ${account.fullName} แล้ว`)}
-              >
-                ล้าง PIN
-              </Button>
-            )}
-          </div>
-        </section>
 
         <AlertMessage>{formError}</AlertMessage>
       </div>

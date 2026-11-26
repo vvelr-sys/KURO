@@ -25,7 +25,7 @@ export default function PackagesPage() {
 
 async function PackagesContent() {
   await requireRole('/packages');
-  const { buffetPackage, activeCount, vatRatePercent, error } = await getPackagesPageData();
+  const { buffetPackage, activeCount, vatRatePercent, runningSessionCount, error } = await getPackagesPageData();
   if (error) return <AlertMessage>{error}</AlertMessage>;
 
   return (
@@ -36,6 +36,12 @@ async function PackagesContent() {
         </AlertMessage>
       )}
       {activeCount === 0 && <AlertMessage>ยังไม่มีราคาบุฟเฟต์ — กรอกแล้วกดบันทึก ระบบจึงเปิดโต๊ะได้</AlertMessage>}
+      {/* แจ้งให้รู้ว่าแก้ราคาตอนนี้ โต๊ะที่เปิดอยู่ยังจ่ายราคาเดิม (Snapshot ล็อกตอนเปิดโต๊ะ — กฎที่ 2) */}
+      {runningSessionCount > 0 && (
+        <p className="rounded-2xl bg-amber-50 px-4 py-3 font-semibold text-amber-900" role="status">
+          ตอนนี้มีรอบบริการที่ยังไม่ปิด {runningSessionCount} รอบ (โต๊ะรวมนับเป็น 1 รอบ) — ถ้าแก้ราคาหรือเวลา รอบเหล่านี้ยังใช้ราคาและเวลาเดิมจนจบรอบ
+        </p>
+      )}
       <BuffetPackageForm initialPackage={buffetPackage} initialVatRatePercent={vatRatePercent} />
     </div>
   );

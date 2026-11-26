@@ -3,6 +3,8 @@
 import { memo, useId, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
+  ArrowDown,
+  ArrowUp,
   CircleCheck,
   CircleOff,
   FolderCog,
@@ -14,7 +16,7 @@ import {
   Trash2,
   UtensilsCrossed,
 } from 'lucide-react';
-import { deleteMenuItem, saveCategory, saveMenuItem, setMenuAvailability } from '@/app/(admin)/menu/actions';
+import { deleteCategory, deleteMenuItem, moveCategory, saveCategory, saveMenuItem, setMenuAvailability } from '@/app/(admin)/menu/actions';
 import { AlertMessage, Button, ImagePickerField, MenuImage, Modal } from '@/components/ui';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useImageUpload } from '@/hooks/useImageUpload';
@@ -440,17 +442,25 @@ function MenuFormModal({ item, categories, onClose, onDone }) {
   );
 }
 
-/** หน้าต่างจัดการหมวดหมู่: เพิ่ม, เปลี่ยนชื่อ, ลำดับการแสดง, เปิด/ปิด */
+/** หน้าต่างจัดการหมวดหมู่: เพิ่ม, เปลี่ยนชื่อ, เลื่อนลำดับ (ลำดับเดียวกับหน้าลูกค้า), เปิด/ปิด, ลบหมวดที่ว่าง */
 function CategoryModal({ categories, menuItems, onClose }) {
   const nextOrder = categories.reduce((max, category) => Math.max(max, category.displayOrder), 0) + 1;
   const [newName, setNewName] = useState('');
   const [busyId, setBusyId] = useState(null);
   const [message, setMessage] = useState(null);
 
-  const run = async (key, input, successText) => {
+  // จำนวนเมนูในแต่ละหมวด (คำนวณครั้งเดียว ไม่ต้อง filter ทุกแถว)
+  const menuCountByCategory = useMemo(() => {
+    const counts = new Map();
+    for (const item of menuItems) counts.set(item.categoryId, (counts.get(item.categoryId) ?? 0) + 1);
+    return counts;
+  }, [menuItems]);
+
+  /** เรียก Server Action แล้วแสดงผล — task คืน { error } */
+  const run = async (key, task, successText) => {
     setBusyId(key);
     setMessage(null);
-    const result = await saveCategory(input);
+    const result = await task();
     setBusyId(null);
     setMessage(result.error ? { tone: 'error', text: result.error } : { tone: 'success', text: successText });
     return !result.error;
@@ -459,11 +469,16 @@ function CategoryModal({ categories, menuItems, onClose }) {
   const handleAdd = async (event) => {
     event.preventDefault();
     const name = newName.trim();
-    if (await run('new', { name, displayOrder: nextOrder, isActive: true }, `เพิ่มหมวด ${name} แล้ว`)) setNewName('');
+    if (await run('new', () => saveCategory({ name, displayOrder: nextOrder, isActive: true }), `เพิ่มหมวด ${name} แล้ว`)) setNewName('');
+  };
+
+  const handleDelete = (category) => {
+    if (!window.confirm(`ลบหมวด "${category.name}"?`)) return;
+    run(category.id, () => deleteCategory({ id: category.id }), `ลบหมวด ${category.name} แล้ว`);
   };
 
   return (
-    <Modal isOpen onClose={onClose} isCloseDisabled={busyId !== null} title="หมวดหมู่เมนู" description="หมวดที่ปิด ลูกค้าจะไม่เห็นเมนูในหมวดนั้น" className="max-w-2xl">
+    <Modal isOpen onClose={onClose} isCloseDisabled={busyId !== null} title="หมวดหมู่เมนู" description="ลำดับนี้ใช้แสดงในหน้าสั่งอาหารของลูกค้า · หมวดที่ปิด ลูกค้าจะไม่เห็นเมนูในหมวดนั้น" className="max-w-2xl">
       <div className="flex flex-col gap-4">
         <form onSubmit={handleAdd} className="flex gap-2">
           <input value={newName} onChange={(event) => setNewName(event.target.value)} maxLength={100} placeholder="ชื่อหมวดใหม่ เช่น เนื้อสัตว์" aria-label="ชื่อหมวดใหม่" className={INPUT_CLASS} />
@@ -478,14 +493,18 @@ function CategoryModal({ categories, menuItems, onClose }) {
           <p className="rounded-2xl bg-surface p-6 text-center text-ink-muted">ยังไม่มีหมวดหมู่</p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {categories.map((category) => (
+            {categories.map((category, index) => (
               <CategoryRow
                 key={`${category.id}-${category.name}-${category.displayOrder}-${category.isActive}`}
                 category={category}
-                menuCount={menuItems.filter((item) => item.categoryId === category.id).length}
+                menuCount={menuCountByCategory.get(category.id) ?? 0}
+                isFirst={index === 0}
+                isLast={index === categories.length - 1}
                 isBusy={busyId === category.id}
                 isDisabled={busyId !== null}
-                onSave={(input, text) => run(category.id, { id: category.id, ...input }, text)}
+                onSave={(input, text) => run(category.id, () => saveCategory({ id: category.id, ...input }), text)}
+                onMove={(direction) => run(category.id, () => moveCategory({ id: category.id, direction }), `เลื่อนหมวด ${category.name} แล้ว`)}
+                onDelete={() => handleDelete(category)}
               />
             ))}
           </ul>
@@ -495,27 +514,21 @@ function CategoryModal({ categories, menuItems, onClose }) {
   );
 }
 
-function CategoryRow({ category, menuCount, isBusy, isDisabled, onSave }) {
+function CategoryRow({ category, menuCount, isFirst, isLast, isBusy, isDisabled, onSave, onMove, onDelete }) {
   const [name, setName] = useState(category.name);
-  const [displayOrder, setDisplayOrder] = useState(String(category.displayOrder));
-  const isChanged = name.trim() !== category.name || Number(displayOrder) !== category.displayOrder;
+  const isChanged = name.trim() !== category.name;
+  const hasMenus = menuCount > 0;
 
   return (
     <li className={cn('flex flex-wrap items-center gap-2 rounded-2xl bg-surface p-3', !category.isActive && 'opacity-70')}>
-      <input
-        type="number"
-        min={0}
-        max={999}
-        value={displayOrder}
-        onChange={(event) => setDisplayOrder(event.target.value)}
-        aria-label={`ลำดับของ ${category.name}`}
-        title="ลำดับการแสดง (น้อยขึ้นก่อน)"
-        className="h-10 w-16 rounded-xl border border-line bg-white px-2 text-right"
-      />
+      <div className="flex">
+        <IconButton icon={ArrowUp} label={`เลื่อน ${category.name} ขึ้น`} onClick={() => onMove('up')} disabled={isDisabled || isFirst} />
+        <IconButton icon={ArrowDown} label={`เลื่อน ${category.name} ลง`} onClick={() => onMove('down')} disabled={isDisabled || isLast} />
+      </div>
       <input value={name} onChange={(event) => setName(event.target.value)} maxLength={100} aria-label="ชื่อหมวด" className="h-10 min-w-40 flex-1 rounded-xl border border-line bg-white px-3" />
       <span className="text-sm text-ink-muted">{menuCount} เมนู</span>
       {isChanged && (
-        <Button size="sm" isLoading={isBusy} disabled={isDisabled} onClick={() => onSave({ name, displayOrder: Number(displayOrder), isActive: category.isActive }, `บันทึกหมวด ${name.trim()} แล้ว`)}>
+        <Button size="sm" isLoading={isBusy} disabled={isDisabled} onClick={() => onSave({ name, displayOrder: category.displayOrder, isActive: category.isActive }, `บันทึกหมวด ${name.trim()} แล้ว`)}>
           บันทึก
         </Button>
       )}
@@ -533,6 +546,32 @@ function CategoryRow({ category, menuCount, isBusy, isDisabled, onSave }) {
       >
         {category.isActive ? 'ปิดหมวด' : 'เปิดหมวด'}
       </Button>
+      {/* ลบได้เฉพาะหมวดที่ว่าง — มีเมนูอยู่ให้ปิดหมวดแทน */}
+      <IconButton
+        icon={Trash2}
+        label={hasMenus ? 'ยังมีเมนูในหมวดนี้ ลบไม่ได้' : `ลบหมวด ${category.name}`}
+        onClick={onDelete}
+        disabled={isDisabled || hasMenus}
+        isDanger
+      />
     </li>
+  );
+}
+
+function IconButton({ icon: Icon, label, onClick, disabled = false, isDanger = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      className={cn(
+        'rounded-xl p-2 hover:bg-white disabled:cursor-not-allowed disabled:text-ink-muted/40 disabled:hover:bg-transparent',
+        isDanger ? 'text-danger' : 'text-ink'
+      )}
+    >
+      <Icon className="size-5" aria-hidden />
+    </button>
   );
 }

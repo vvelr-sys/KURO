@@ -157,12 +157,16 @@ const OrderTicketCard = React.memo(function OrderTicketCard({ order, nowTimestam
     if (isFinishingAll) return;
     setActionError(null);
     setIsFinishingAll(true);
-    const result = await markAllServed(order.order_id);
+    // ส่งเฉพาะรายการที่ค้างอยู่บนการ์ดนี้ (ตอนกรองสถานี = เฉพาะของสถานีนั้น)
+    const pendingOrCookingIds = activeDishes
+      .filter((dish) => dish.status === "pending" || dish.status === "cooking")
+      .map((dish) => dish.id);
+    const result = await markAllServed(order.order_id, pendingOrCookingIds);
     setIsFinishingAll(false);
 
     if (result.success) onStatusChange?.();
     else setActionError(result.error);
-  }, [isFinishingAll, order.order_id, onStatusChange]);
+  }, [isFinishingAll, order.order_id, activeDishes, onStatusChange]);
 
   const tableLabel = order.table_number || "-";
   const servedCount = activeDishes.filter((dish) => dish.status === "served").length;

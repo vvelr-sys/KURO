@@ -34,6 +34,9 @@
 | **ชั่งเนื้อสัตว์เหลือ** | `RECORD_LEFTOVER` | Staff | `leftover_records` | ไม่ | น้ำหนักเป็นกรัม, ค่าปรับที่คำนวณได้ |
 | **ปรับยอดสต็อก** (อนุมัติผลนับ) | `ADJUST_STOCK_COUNT` | Manager (Admin Emergency) | `stock_counts` | Admin **ใช่** | ยอดระบบ, ยอดนับจริง, ผลต่าง (ปรับยอดตามผลต่าง) |
 | **แก้ราคาบุฟเฟต์ / VAT** | `UPDATE_PACKAGE` | Admin | `packages` (+ `app_settings.vat_rate_percent`) | ไม่ | เฉพาะค่าที่เปลี่ยน ก่อน/หลัง (ชื่อ, ราคาผู้ใหญ่/เด็ก, เวลา, VAT) |
+| **เพิ่ม / แก้ไข / ลบเมนู** | `CREATE_MENU` / `UPDATE_MENU` / `DELETE_MENU` | Manager / Admin | `menu_items` | ไม่ | เพิ่ม: ข้อมูลเมนูทั้งหมด · แก้: ชื่อเมนู + เฉพาะช่องที่เปลี่ยน ก่อน/หลัง · ลบ: ข้อมูลเมนูก่อนลบ (ลบได้เฉพาะเมนูที่ยังไม่เคยถูกสั่ง) |
+| **เพิ่ม / แก้ไข / ลบหมวดหมู่** | `CREATE_CATEGORY` / `UPDATE_CATEGORY` / `DELETE_CATEGORY` | Manager / Admin | `categories` | ไม่ | ชื่อ, ลำดับ, เปิด/ปิด ก่อน/หลัง (ลบได้เฉพาะหมวดที่ไม่มีเมนู) |
+| **เรียงลำดับหมวดหมู่** | `REORDER_CATEGORY` | Manager / Admin | `categories` | ไม่ | ลำดับชื่อหมวดก่อน/หลัง |
 | **เพิ่มพนักงาน** | `CREATE_STAFF` | Admin | `profiles` | ไม่ | ชื่อ, อีเมล, ตำแหน่ง, มี PIN หรือไม่ (ไม่เก็บรหัสผ่าน/PIN) |
 | **แก้ข้อมูลพนักงาน** | `UPDATE_STAFF` | Admin | `profiles` | ไม่ | ชื่อ/ตำแหน่ง/สถานะเปิดใช้งาน ก่อน/หลัง หรือ "ตั้งรหัสผ่านใหม่" / "ตั้ง PIN ใหม่" / "ล้าง PIN" |
 | **Emergency Override** | `EMERGENCY_OVERRIDE` | Admin | Any (เช่น `ingredients` ปรับยอดฉุกเฉิน, `stock_counts` อนุมัติแทน) | **ใช่** | เหตุจำเป็นที่ต้องทำแทน Manager, ยอดก่อน/หลัง |

@@ -1,6 +1,5 @@
 'use server';
 
-import bcrypt from 'bcryptjs';
 import { refresh } from 'next/cache';
 import { toDisplayError } from '@/lib/action-helpers';
 import { checkActionRole } from '@/lib/auth';
@@ -9,12 +8,10 @@ import { ROLE_LABELS, ROUTE_PERMISSIONS } from '@/lib/constants';
 import { hasServiceRoleKey } from './data';
 
 // Server Action ของหน้าพนักงาน (admin เท่านั้น)
-// สร้างบัญชี / เปลี่ยนรหัสผ่าน / ตั้ง PIN ต้องใช้ Service Role Key (ฝั่งเซิร์ฟเวอร์เท่านั้น)
+// สร้างบัญชี / เปลี่ยนรหัสผ่าน ต้องใช้ Service Role Key (ฝั่งเซิร์ฟเวอร์เท่านั้น)
 const STAFF_ROLES = ROUTE_PERMISSIONS['/staff'];
 const VALID_ROLES = Object.keys(ROLE_LABELS);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PIN_PATTERN = /^\d{4,6}$/;
-const BCRYPT_ROUNDS = 10;
 const NO_KEY_ERROR = 'ยังไม่ได้ตั้งค่า SUPABASE_SERVICE_ROLE_KEY ในไฟล์ .env.local — ติดต่อผู้ดูแลระบบ';
 
 /**
@@ -28,7 +25,7 @@ async function prepareAdminAction() {
   return { staff, adminClient: createAdminClient(), error: null };
 }
 
-/** บันทึก Audit Log (ไม่บันทึกรหัสผ่าน/PIN ลง payload) */
+/** บันทึก Audit Log (ไม่บันทึกรหัสผ่านลง payload) */
 async function writeAudit(adminClient, actorId, action, targetId, payloadBefore, payloadAfter) {
   const { error } = await adminClient.from('audit_logs').insert({
     actor_id: actorId,
@@ -43,7 +40,7 @@ async function writeAudit(adminClient, actorId, action, targetId, payloadBefore,
 
 /**
  * สร้างบัญชีพนักงานใหม่ (Supabase Auth + profiles) — ยืนยันอีเมลให้ทันที ล็อกอินได้เลย
- * @param {{ fullName: string, email: string, password: string, role: string, pin?: string }} input
+ * @param {{ fullName: string, email: string, password: string, role: string }} input
  * @returns {Promise<{ error: string|null, fieldErrors: Record<string, string> }>}
  */
 export async function createStaffAccount(input) {
@@ -54,14 +51,12 @@ export async function createStaffAccount(input) {
   const email = String(input?.email ?? '').trim().toLowerCase();
   const password = String(input?.password ?? '');
   const role = String(input?.role ?? '');
-  const pin = String(input?.pin ?? '').trim();
 
   const fieldErrors = {};
   if (!fullName || fullName.length > 100) fieldErrors.fullName = 'กรอกชื่อ 1 - 100 ตัวอักษร';
   if (!EMAIL_PATTERN.test(email)) fieldErrors.email = 'รูปแบบอีเมลไม่ถูกต้อง';
   if (password.length < 8) fieldErrors.password = 'รหัสผ่านอย่างน้อย 8 ตัวอักษร';
   if (!VALID_ROLES.includes(role)) fieldErrors.role = 'กรุณาเลือกตำแหน่ง';
-  if (pin && !PIN_PATTERN.test(pin)) fieldErrors.pin = 'PIN เป็นตัวเลข 4 - 6 หลัก';
   if (Object.keys(fieldErrors).length > 0) return { error: 'กรุณาตรวจสอบข้อมูลที่กรอก', fieldErrors };
 
   const { data: created, error: createError } = await adminClient.auth.admin.createUser({
@@ -82,7 +77,6 @@ export async function createStaffAccount(input) {
 
   const userId = created.user.id;
   const profileRow = { id: userId, full_name: fullName, role, is_active: true };
-  if (pin) profileRow.pin_hash = await bcrypt.hash(pin, BCRYPT_ROUNDS);
 
   const { error: profileError } = await adminClient.from('profiles').upsert(profileRow, { onConflict: 'id' });
   if (profileError) {
@@ -91,7 +85,7 @@ export async function createStaffAccount(input) {
     return { error: toDisplayError(profileError, 'staff create profile'), fieldErrors: {} };
   }
 
-  await writeAudit(adminClient, staff.id, 'CREATE_STAFF', userId, null, { full_name: fullName, email, role, has_pin: Boolean(pin) });
+  await writeAudit(adminClient, staff.id, 'CREATE_STAFF', userId, null, { full_name: fullName, email, role });
   refresh();
   return { error: null, fieldErrors: {} };
 }
@@ -165,29 +159,5 @@ export async function resetStaffPassword(input) {
   }
 
   await writeAudit(adminClient, staff.id, 'UPDATE_STAFF', input.id, null, { password: 'ตั้งรหัสผ่านใหม่' });
-  return { error: null };
-}
-
-/**
- * ตั้ง / ล้าง PIN พนักงาน (เก็บเป็น bcrypt hash — ไม่มีใครอ่าน PIN จริงได้)
- * @param {{ id: string, pin: string|null }} input - pin ว่าง/null = ล้าง PIN
- * @returns {Promise<{ error: string|null }>}
- */
-export async function setStaffPin(input) {
-  const { staff, adminClient, error: prepareError } = await prepareAdminAction();
-  if (prepareError) return { error: prepareError };
-
-  const pin = String(input?.pin ?? '').trim();
-  if (pin && !PIN_PATTERN.test(pin)) return { error: 'PIN เป็นตัวเลข 4 - 6 หลัก' };
-
-  const pinHash = pin ? await bcrypt.hash(pin, BCRYPT_ROUNDS) : null;
-  const { error } = await adminClient
-    .from('profiles')
-    .update({ pin_hash: pinHash, updated_at: new Date().toISOString() })
-    .eq('id', input?.id);
-  if (error) return { error: toDisplayError(error, 'staff pin') };
-
-  await writeAudit(adminClient, staff.id, 'UPDATE_STAFF', input.id, null, { pin: pin ? 'ตั้ง PIN ใหม่' : 'ล้าง PIN' });
-  refresh();
   return { error: null };
 }

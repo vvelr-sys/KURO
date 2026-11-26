@@ -46,8 +46,9 @@ export default function KdsScreen() {
   // โหมดมุมมอง: 'ticket' (การ์ดตามโต๊ะ) หรือ 'prep' (รวมรายการเตรียม)
   const [viewMode, setViewMode] = useState("ticket");
 
-  // ข้อมูลออเดอร์
-  const [orders, setOrders] = useState([]);
+  // ข้อมูลออเดอร์ "ทุกสถานี" (โหลดครั้งเดียว แล้วกรองสถานีบนหน้าจอ
+  // → ตัวเลขของทุกสถานีบนแถบเลือกไม่หาย และสลับสถานีได้ทันทีไม่ต้องรอโหลด)
+  const [allOrders, setAllOrders] = useState([]);
   const [errorMessage, setErrorMessage] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -79,8 +80,8 @@ export default function KdsScreen() {
     async (isManual = false) => {
       if (isManual) setIsRefreshing(true);
       try {
-        const ordersRes = await getKitchenOrders(selectedStation);
-        setOrders(ordersRes.orders || []);
+        const ordersRes = await getKitchenOrders(null);
+        setAllOrders(ordersRes.orders || []);
         setErrorMessage(ordersRes.error);
       } catch {
         setErrorMessage("เกิดข้อผิดพลาดในการโหลดข้อมูลออเดอร์");
@@ -89,16 +90,16 @@ export default function KdsScreen() {
         if (isManual) setIsRefreshing(false);
       }
     },
-    [selectedStation]
+    []
   );
 
-  // โหลดเมื่อเปิดหน้าหรือเปลี่ยนสถานี
+  // โหลดครั้งแรกตอนเปิดหน้า (เปลี่ยนสถานีไม่ต้องโหลดใหม่)
   useEffect(() => {
     let isCurrent = true;
 
-    getKitchenOrders(selectedStation).then((ordersRes) => {
+    getKitchenOrders(null).then((ordersRes) => {
       if (!isCurrent) return;
-      setOrders(ordersRes.orders || []);
+      setAllOrders(ordersRes.orders || []);
       setErrorMessage(ordersRes.error);
       setIsLoading(false);
     });
@@ -106,11 +107,11 @@ export default function KdsScreen() {
     return () => {
       isCurrent = false;
     };
-  }, [selectedStation]);
+  }, []);
 
-  // ดักฟัง Supabase Realtime
+  // ดักฟัง Supabase Realtime ทุกสถานี (ให้ตัวเลขของสถานีอื่นอัปเดตด้วย)
   useKitchenRealtime({
-    station: selectedStation,
+    station: null,
     onNewOrder: () => {
       playAlert();
       setNewOrderAlert({
@@ -123,22 +124,37 @@ export default function KdsScreen() {
     onMenuChange: () => loadOrders(false),
   });
 
-  // ─── คำนวณสรุปสถิติด้านบน (Stats Bar) ──────────────────────────
+  // ─── ออเดอร์ที่แสดงตามสถานีที่เลือก ──────────────────────────
+  // เก็บเฉพาะรายการของสถานีนั้น และตัดบิลที่ไม่มีรายการค้าง (รอทำ/กำลังทำ) ของสถานีนั้นออก
+  const orders = useMemo(() => {
+    if (!selectedStation) return allOrders;
+    return allOrders
+      .map((order) => ({ ...order, items: order.items.filter((item) => item.station === selectedStation) }))
+      .filter((order) => order.items.some((item) => item.status === "pending" || item.status === "cooking"));
+  }, [allOrders, selectedStation]);
+
+  // ─── จำนวนจานรอทำ/กำลังทำ แยกสถานี (นับจากทุกสถานีเสมอ ไม่ขึ้นกับสถานีที่เลือก) ───
+  const stationCounts = useMemo(() => {
+    const counts = { fresh: 0, beverage: 0, grill: 0, hot_kitchen: 0 };
+    for (const order of allOrders) {
+      for (const item of order.items) {
+        if ((item.status === "pending" || item.status === "cooking") && counts[item.station] !== undefined) {
+          counts[item.station] += item.quantity;
+        }
+      }
+    }
+    return counts;
+  }, [allOrders]);
+
+  // ─── คำนวณสรุปสถิติด้านบน (Stats Bar) ของสถานีที่เลือก ──────────────────────────
   const stats = useMemo(() => {
     let waitingCount = 0;
     let cookingCount = 0;
     let overdueCount = 0;
-    const stationCounts = { fresh: 0, beverage: 0, grill: 0, hot_kitchen: 0 };
 
     for (const order of orders) {
       for (const item of order.items) {
         if (item.status === "cancelled") continue;
-
-        if (item.station && stationCounts[item.station] !== undefined) {
-          if (item.status === "pending" || item.status === "cooking") {
-            stationCounts[item.station] += item.quantity;
-          }
-        }
 
         if (item.status === "pending") {
           waitingCount += item.quantity;
@@ -160,7 +176,6 @@ export default function KdsScreen() {
       waitingCount,
       cookingCount,
       overdueCount,
-      stationCounts,
     };
   }, [orders, nowTimestamp]);
 
@@ -247,7 +262,7 @@ export default function KdsScreen() {
         <StationFilter
           selectedStation={selectedStation}
           onSelect={setSelectedStation}
-          orderCountByStation={stats.stationCounts}
+          orderCountByStation={stationCounts}
         />
         <div className="ml-auto flex gap-1 rounded-full bg-surface p-1" role="group" aria-label="เลือกมุมมอง">
           {VIEW_MODES.map(({ key, label, icon: Icon }) => (

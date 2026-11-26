@@ -7,7 +7,7 @@ import { getStaffPageData } from './data';
 export const metadata = { title: 'พนักงาน | KURO SHABU POS' };
 
 /**
- * หน้า 4.6 จัดการพนักงานและสิทธิ์ (admin เท่านั้น): เพิ่ม / แก้ไข / ปิดใช้งาน, กำหนดตำแหน่ง, ตั้งรหัสผ่านและ PIN
+ * หน้า 4.6 จัดการพนักงานและสิทธิ์ (admin เท่านั้น): เพิ่ม / แก้ไข / ปิดใช้งาน, กำหนดตำแหน่ง, ตั้งรหัสผ่าน
  */
 export default function StaffPage() {
   return (
