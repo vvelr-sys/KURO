@@ -14,7 +14,7 @@ const VALID_STATIONS = Object.keys(KITCHEN_STATION_LABELS);
 
 // ช่องที่เก็บลง Audit Log (ก่อน/หลังแก้)
 const CATEGORY_AUDIT_COLUMNS = 'name, display_order, is_active';
-const MENU_AUDIT_COLUMNS = 'category_id, name, description, image_url, extra_price, kitchen_station, max_quantity_per_order';
+const MENU_AUDIT_COLUMNS = 'category_id, name, description, image_url, extra_price, kitchen_station';
 
 /**
  * บันทึก Audit Log ของหน้าเมนู (ไม่ใช้ .select() ต่อท้าย เพราะคนบันทึกไม่จำเป็นต้องมีสิทธิ์อ่าน audit_logs)
@@ -166,7 +166,7 @@ export async function deleteCategory({ id }) {
 /**
  * เพิ่ม/แก้เมนู (สถานะเปิด/ปิดขายเปลี่ยนที่ setMenuAvailability · สูตร BOM แก้ที่หน้า /inventory)
  * @param {{ id?: string|null, categoryId: string, name: string, description?: string, imageUrl?: string|null,
- *           extraPrice: number|string, kitchenStation: string, maxQuantityPerOrder?: number|string|null }} input
+ *           extraPrice: number|string, kitchenStation: string }} input
  * @returns {Promise<{ error: string|null, fieldErrors: Record<string, string> }>}
  */
 export async function saveMenuItem(input) {
@@ -176,8 +176,6 @@ export async function saveMenuItem(input) {
   const name = String(input?.name ?? '').trim();
   const description = String(input?.description ?? '').trim();
   const extraPrice = Number(input?.extraPrice || 0);
-  const maxText = String(input?.maxQuantityPerOrder ?? '').trim();
-  const maxQuantity = maxText === '' ? null : Number(maxText);
   const imageUrl = input?.imageUrl || null;
 
   const fieldErrors = {};
@@ -186,9 +184,6 @@ export async function saveMenuItem(input) {
   if (!input?.categoryId) fieldErrors.categoryId = 'กรุณาเลือกหมวดหมู่';
   if (!VALID_STATIONS.includes(input?.kitchenStation)) fieldErrors.kitchenStation = 'กรุณาเลือกสถานีครัว';
   if (!Number.isFinite(extraPrice) || extraPrice < 0 || extraPrice > 10000) fieldErrors.extraPrice = 'กรอก 0 - 10,000 บาท';
-  if (maxQuantity !== null && (!Number.isInteger(maxQuantity) || maxQuantity < 1 || maxQuantity > 99)) {
-    fieldErrors.maxQuantityPerOrder = 'กรอกจำนวนเต็ม 1 - 99 หรือเว้นว่าง = ไม่จำกัด';
-  }
   if (imageUrl && !toStoragePath(imageUrl)) fieldErrors.imageUrl = 'รูปต้องอัปโหลดผ่านหน้านี้เท่านั้น';
   if (Object.keys(fieldErrors).length > 0) return { error: 'กรุณาตรวจสอบข้อมูลที่กรอก', fieldErrors };
 
@@ -199,7 +194,6 @@ export async function saveMenuItem(input) {
     image_url: imageUrl,
     extra_price: Math.round(extraPrice * 100) / 100,
     kitchen_station: input.kitchenStation,
-    max_quantity_per_order: maxQuantity,
     updated_at: new Date().toISOString(),
   };
 

@@ -37,8 +37,8 @@
 | **เพิ่ม / แก้ไข / ลบเมนู** | `CREATE_MENU` / `UPDATE_MENU` / `DELETE_MENU` | Manager / Admin | `menu_items` | ไม่ | เพิ่ม: ข้อมูลเมนูทั้งหมด · แก้: ชื่อเมนู + เฉพาะช่องที่เปลี่ยน ก่อน/หลัง · ลบ: ข้อมูลเมนูก่อนลบ (ลบได้เฉพาะเมนูที่ยังไม่เคยถูกสั่ง) |
 | **เพิ่ม / แก้ไข / ลบหมวดหมู่** | `CREATE_CATEGORY` / `UPDATE_CATEGORY` / `DELETE_CATEGORY` | Manager / Admin | `categories` | ไม่ | ชื่อ, ลำดับ, เปิด/ปิด ก่อน/หลัง (ลบได้เฉพาะหมวดที่ไม่มีเมนู) |
 | **เรียงลำดับหมวดหมู่** | `REORDER_CATEGORY` | Manager / Admin | `categories` | ไม่ | ลำดับชื่อหมวดก่อน/หลัง |
-| **เพิ่มพนักงาน** | `CREATE_STAFF` | Admin | `profiles` | ไม่ | ชื่อ, อีเมล, ตำแหน่ง, มี PIN หรือไม่ (ไม่เก็บรหัสผ่าน/PIN) |
-| **แก้ข้อมูลพนักงาน** | `UPDATE_STAFF` | Admin | `profiles` | ไม่ | ชื่อ/ตำแหน่ง/สถานะเปิดใช้งาน ก่อน/หลัง หรือ "ตั้งรหัสผ่านใหม่" / "ตั้ง PIN ใหม่" / "ล้าง PIN" |
+| **เพิ่มพนักงาน** | `CREATE_STAFF` | Admin | `profiles` | ไม่ | ชื่อ, อีเมล, ตำแหน่ง (ไม่เก็บรหัสผ่าน) |
+| **แก้ข้อมูลพนักงาน** | `UPDATE_STAFF` | Admin | `profiles` | ไม่ | ชื่อ/ตำแหน่ง/สถานะเปิดใช้งาน ก่อน/หลัง หรือ "ตั้งรหัสผ่านใหม่" |
 | **Emergency Override** | `EMERGENCY_OVERRIDE` | Admin | Any (เช่น `ingredients` ปรับยอดฉุกเฉิน, `stock_counts` อนุมัติแทน) | **ใช่** | เหตุจำเป็นที่ต้องทำแทน Manager, ยอดก่อน/หลัง |
 
 ---
@@ -75,7 +75,7 @@
 | 10.1 | **เปิด/ปิดเมนูด้วยมือ (ทางเทคนิค)** | `Kitchen`, `Manager`, `Admin` | ผ่าน `fn_set_menu_availability` เท่านั้น (migration 028) — ครัวไม่มีสิทธิ์แก้ตาราง `menu_items` ตรง |
 | 14.1 | **อ่านออเดอร์ / รายการอาหาร** | พนักงานทุกตำแหน่งที่ล็อกอิน | migration 028 — คนไม่ล็อกอินอ่าน/เพิ่มตรงไม่ได้ · ลูกค้ายังสั่งผ่าน QR ได้ แต่หน้าลูกค้าต้องตรวจ QR token ที่เซิร์ฟเวอร์ก่อน (SEED.md ข้อ 5: ฟังก์ชัน SECURITY DEFINER หรือ Server Action + `createAdminClient()`) · พนักงานแก้ได้เฉพาะ `status` และข้อมูลการยกเลิก |
 | 21.1 | **อ่านตัวเลือกเมนู / ตัวเลือกที่ลูกค้าเลือก** | พนักงานทุกตำแหน่งที่ล็อกอิน (อ่านอย่างเดียว) | migration 027 — จอครัวต้องเห็น "เผ็ดน้อย" ฯลฯ · แก้ไขยังเป็น Admin |
-| 22 | **สร้างบัญชี / ตั้งรหัสผ่าน / ตั้ง PIN** | `Admin` | ทำฝั่งเซิร์ฟเวอร์ด้วย Service Role Key เท่านั้น — `pin_hash` ไม่ถูกส่งไปหน้าเว็บ |
+| 22 | **สร้างบัญชี / ตั้งรหัสผ่าน** | `Admin` | ทำฝั่งเซิร์ฟเวอร์ด้วย Service Role Key เท่านั้น |
 
 > **หมายเหตุสำหรับลูกค้า:** ลูกค้า (ไม่ต้องล็อกอิน) ดูคิวตัวเอง ดูสถานะอาหารของโต๊ะตัวเอง และเรียกพนักงานได้เท่านั้น
 
@@ -98,7 +98,7 @@
 | `trg_ingredient_stock_menu_availability` / `trg_bom_menu_availability` | `ingredients`, `menu_ingredients` → `menu_items` | FR-024: วัตถุดิบไม่พอทำ 1 จาน → `out_of_stock` · เติมครบ → `available` (ไม่แตะ `manual_off`) |
 | `idx_unique_stock_count_round` | `stock_counts` | 1 วันมีผลนับรอบเช้าและรอบเย็นได้อย่างละ 1 ครั้ง (ยกเว้นรอบที่ถูกปฏิเสธ นับใหม่ได้) |
 | `payments (Split Payment)` | `payments` | ปลด UNIQUE บน `bill_id` เพื่อรองรับการชำระเงินหลายรายการต่อ 1 บิล โดยมี Trigger ตรวจสอบ `SUM(amount_paid) = bills.total_amount` |
-| `profiles.pin_hash` | `profiles` | เข้ารหัส Staff PIN ด้วย bcrypt เพื่อความปลอดภัยสูงสุดในการล็อกอินหน้าร้าน |
+| `profiles.pin_hash` | `profiles` | ไม่ใช้แล้ว — ตัดระบบ Staff PIN ออก (26 พ.ย. 2026) |
 
 ---
 

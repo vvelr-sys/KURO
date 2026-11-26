@@ -31,7 +31,7 @@
 | `id` | UUID | NO | - | รหัสผู้ใช้ตรงกับ Supabase Auth ID |
 | `full_name` | VARCHAR(100) | NO | - | ชื่อ-นามสกุลพนักงาน |
 | `role` | VARCHAR(20) | NO | - | บทบาท: `admin`, `manager`, `staff`, `kitchen`, `cashier` |
-| `pin_hash` | VARCHAR(255) | YES | - | Hash รหัส Staff PIN (bcrypt) สำหรับล็อกอินด่วน — **อ่านผ่าน API ไม่ได้** (migration 004) |
+| `pin_hash` | VARCHAR(255) | YES | - | **ไม่ใช้แล้ว** (ตัดระบบ Staff PIN ออก 26 พ.ย. 2026) — คงคอลัมน์ไว้ ไม่มีโค้ดอ่าน/เขียน · อ่านผ่าน API ไม่ได้ (migration 004) |
 | `is_active` | BOOLEAN | NO | `true` | สถานะเปิด/ปิดการใช้งานบัญชี |
 | `created_at` | TIMESTAMPTZ | NO | `now()` | วันเวลาที่สร้าง |
 | `updated_at` | TIMESTAMPTZ | NO | `now()` | วันเวลาที่แก้ไขล่าสุด |
@@ -155,7 +155,6 @@
 | `kitchen_station` | VARCHAR(30) | NO | `'hot_kitchen'` | สถานี KDS: `fresh`, `beverage`, `grill`, `hot_kitchen` |
 | `availability_status`| VARCHAR(20)| NO | `'available'` | สถานะ: `available`, `out_of_stock`, `manual_off` |
 | `disabled_reason` | TEXT | YES | - | เหตุผลที่ปิดการจำหน่าย — บันทึกตอนปิดเมนูด้วยมือ (`manual_off`) ล้างเมื่อเปิดกลับ |
-| `max_quantity_per_order` | INT | YES | - | จำนวนสูงสุดต่อการกดสั่ง 1 ครั้ง (1-99) · NULL = ไม่จำกัด (migration 025) |
 
 ### 3.3 `package_menu_items` (จับคู่เมนูในแพ็กเกจ)
 > สถานะ: สำรองไว้ ยังไม่ใช้ในเฟส 1 (ไม่มีหน้าจอ) — ดู AGENTS.md ส่วนที่ 10

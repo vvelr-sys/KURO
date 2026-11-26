@@ -209,7 +209,6 @@ const MenuCard = memo(function MenuCard({ item, categoryName, isBusy, onEdit, on
           ) : (
             <span className="rounded-full bg-surface px-2 py-0.5">รวมในบุฟเฟต์</span>
           )}
-          {item.maxQuantityPerOrder && <span className="rounded-full bg-surface px-2 py-0.5">สั่งได้ {item.maxQuantityPerOrder}/ครั้ง</span>}
           {item.bomCount === 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-900">ยังไม่มีสูตร</span>}
         </div>
         {item.availabilityStatus === 'manual_off' && item.disabledReason && (
@@ -317,7 +316,6 @@ function MenuFormModal({ item, categories, onClose, onDone }) {
     categoryId: item.categoryId ?? activeCategories[0]?.id ?? '',
     kitchenStation: item.kitchenStation ?? 'fresh',
     extraPrice: String(item.extraPrice ?? 0),
-    maxQuantityPerOrder: item.maxQuantityPerOrder ? String(item.maxQuantityPerOrder) : '',
   }));
   const imageUpload = useImageUpload({ initialUrl: item.imageUrl ?? null, folder: 'items' });
   const [busyAction, setBusyAction] = useState(null);
@@ -423,15 +421,6 @@ function MenuFormModal({ item, categories, onClose, onDone }) {
           </Field>
           <Field label="ราคาสั่งเพิ่ม (บาท)" hint="0 = รวมในบุฟเฟต์ · มากกว่า 0 = คิดเงินเพิ่มในบิล" error={fieldErrors.extraPrice}>
             <input inputMode="decimal" value={values.extraPrice} onChange={setValue('extraPrice')} className={cn(INPUT_CLASS, 'text-right')} />
-          </Field>
-          <Field label="สั่งได้สูงสุดต่อครั้ง" hint="เว้นว่าง = ไม่จำกัด · นับต่อการกดสั่ง 1 ครั้ง" error={fieldErrors.maxQuantityPerOrder}>
-            <input
-              inputMode="numeric"
-              value={values.maxQuantityPerOrder}
-              onChange={(event) => setValues((current) => ({ ...current, maxQuantityPerOrder: event.target.value.replace(/\D/g, '').slice(0, 2) }))}
-              placeholder="ไม่จำกัด"
-              className={cn(INPUT_CLASS, 'text-right')}
-            />
           </Field>
         </div>
 

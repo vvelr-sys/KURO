@@ -21,7 +21,6 @@ import { createClient } from '@/lib/supabase/server';
  * @property {'fresh'|'beverage'|'grill'|'hot_kitchen'} kitchenStation
  * @property {'available'|'out_of_stock'|'manual_off'} availabilityStatus
  * @property {string|null} disabledReason - เหตุผลที่ปิดขาย (เฉพาะ manual_off)
- * @property {number|null} maxQuantityPerOrder - null = ไม่จำกัด
  * @property {number} bomCount - จำนวนวัตถุดิบในสูตรตัดสต็อก
  * @property {string[]} ingredientNames - ชื่อวัตถุดิบในสูตร (เชื่อมกับหน้าสต็อก)
  */
@@ -39,7 +38,7 @@ export async function getMenuPageData() {
     supabase
       .from('menu_items')
       .select(
-        'id, category_id, name, description, image_url, extra_price, kitchen_station, availability_status, disabled_reason, max_quantity_per_order, menu_ingredients(ingredients(name))'
+        'id, category_id, name, description, image_url, extra_price, kitchen_station, availability_status, disabled_reason, menu_ingredients(ingredients(name))'
       )
       .order('name'),
   ]);
@@ -66,7 +65,6 @@ export async function getMenuPageData() {
       kitchenStation: row.kitchen_station,
       availabilityStatus: row.availability_status,
       disabledReason: row.disabled_reason,
-      maxQuantityPerOrder: row.max_quantity_per_order,
       bomCount: row.menu_ingredients?.length ?? 0,
       ingredientNames: (row.menu_ingredients ?? []).map((link) => link.ingredients?.name).filter(Boolean),
     })),

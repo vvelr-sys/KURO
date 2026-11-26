@@ -7,7 +7,7 @@ import { getMenuPageData } from './data';
 export const metadata = { title: 'จัดการเมนู | KURO SHABU POS' };
 
 /**
- * หน้า 4.2 จัดการเมนู (manager, admin): ชื่อ, รูป, หมวดหมู่, สถานีครัว, ราคาสั่งเพิ่ม, จำกัดจำนวนต่อครั้ง, เปิด/ปิดขาย
+ * หน้า 4.2 จัดการเมนู (manager, admin): ชื่อ, รูป, หมวดหมู่, สถานีครัว, ราคาสั่งเพิ่ม, เปิด/ปิดขาย
  * สูตรตัดสต็อก (BOM) อยู่ที่หน้า /inventory
  */
 export default function MenuPage() {

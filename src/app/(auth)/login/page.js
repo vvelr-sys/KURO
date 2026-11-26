@@ -11,7 +11,7 @@ export const metadata = {
 };
 
 /**
- * หน้า 4.1 เข้าสู่ระบบ (ทุกตำแหน่ง) — ตอนนี้ใช้อีเมล + รหัสผ่าน, Staff PIN จะเพิ่มทีหลัง
+ * หน้า 4.1 เข้าสู่ระบบ (ทุกตำแหน่ง) — ใช้อีเมล + รหัสผ่าน (ไม่มี Staff PIN)
  * โครงหน้าโหลดทันที ส่วนที่ต้องอ่าน cookie อยู่ใน <Suspense>
  */
 export default function LoginPage({ searchParams }) {
