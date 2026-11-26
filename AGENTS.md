@@ -148,7 +148,11 @@ KURO/
         ├── 025_menu_packages_staff.sql              # T-10: จำกัดจำนวนต่อการสั่ง, Manager แก้หมวดหมู่, ที่เก็บรูปเมนู (Storage)
         ├── 026_ingredient_images.sql                # รูปวัตถุดิบ (ingredients.image_url) + ใบนับสต็อกคืนรูปด้วย
         ├── 027_staff_read_order_options.sql         # พนักงานอ่านตัวเลือกเมนู/ตัวเลือกที่ลูกค้าเลือกได้ (จอครัวแสดง เผ็ดน้อย ฯลฯ)
-        └── 028_fix_permissions_review.sql           # แก้สิทธิ์จากการตรวจระบบ: ครัวเปิด/ปิดเมนูผ่านฟังก์ชัน, ปิดช่องคนนอกเพิ่ม/อ่านออเดอร์, จำกัดช่องที่แก้ได้ใน order_items
+        ├── 028_fix_permissions_review.sql           # แก้สิทธิ์จากการตรวจระบบ: ครัวเปิด/ปิดเมนูผ่านฟังก์ชัน, ปิดช่องคนนอกเพิ่ม/อ่านออเดอร์, จำกัดช่องที่แก้ได้ใน order_items
+        ├── 029_customer_ordering.sql                # หน้าสั่งอาหารลูกค้า: ฟังก์ชันรับ QR token + ปิด RLS ที่ให้ anon เขียน orders/order_items ตรง
+        ├── 030_customer_order_status.sql            # หน้าสถานะอาหารลูกค้า: fn_customer_get_orders (ดึงซ้ำทุก 10 วินาที แทน Realtime)
+        ├── 031_customer_service_requests.sql        # หน้าเรียกพนักงานลูกค้า: ปิด RLS anon บน service_requests + ฟังก์ชันแจ้ง/ดูคำขอ (กันกดซ้ำ)
+        └── 032_customer_queue_view.sql              # หน้าดูคิวลูกค้า: ปิด RLS anon บน queues (เบอร์โทรหลุด) + fn_customer_get_queue
 ```
 
 ---
@@ -389,9 +393,13 @@ export const calcBuffetTotal = (session) =>
 | Channel | ใช้ใน | Event ที่ Subscribe |
 |---|---|---|
 | `table-status` | ผังโต๊ะ, ลูกค้า | `UPDATE` บน `dining_tables` |
-| `order-items:{sessionId}` | หน้าลูกค้า + KDS | `INSERT/UPDATE` บน `order_items` |
-| `queue-updates` | หน้าคิวลูกค้า + พนักงาน | `UPDATE` บน `queues` |
-| `service-requests` | พนักงาน + ลูกค้า | `INSERT/UPDATE` บน `service_requests` |
+| `order-items:{sessionId}` | KDS | `INSERT/UPDATE` บน `order_items` |
+| `queue-updates` | หน้าคิวพนักงาน | `UPDATE` บน `queues` |
+| `service-requests` | พนักงาน | `INSERT/UPDATE` บน `service_requests` |
+| `customer-menu-availability` | หน้าสั่งอาหารลูกค้า | `UPDATE` บน `menu_items` (ป้าย "หมด") |
+
+> [!NOTE]
+> ตั้งแต่ migration 028–032 ลูกค้า (anon) อ่าน `order_items` / `service_requests` / `queues` ตรงไม่ได้ (RLS) จึงรับ Realtime ของตารางเหล่านี้ไม่ได้ — หน้าลูกค้าดึงผ่านฟังก์ชัน `fn_customer_*` ซ้ำเป็นระยะด้วย `usePeriodicRefresh` แทน: สถานะอาหาร / เรียกพนักงาน ทุก 10 วินาที, ดูคิว ทุก 5 วินาที
 | `kitchen-all-stations` / `kitchen-station-{station}` | จอครัว, หน้าเปิด/ปิดเมนู | `*` บน `order_items`, `UPDATE` บน `menu_items` |
 | `stock-updates` | หน้าสต็อก `/inventory` (Manager/Admin) | `INSERT` บน `stock_movements`, `*` บน `stock_counts` (รวมสัญญาณที่มาติดกันเป็นโหลดครั้งเดียว 800ms) |
 
@@ -499,3 +507,4 @@ export const calcBuffetTotal = (session) =>
 | **ออเดอร์: ปิดช่องคนนอก** (26 พ.ย. 2026) | `orders` / `order_items` อ่านได้เฉพาะพนักงานที่ล็อกอิน · ลบสิทธิ์ INSERT ตรงของคนไม่ล็อกอิน (เดิม `WITH CHECK (true)` ใครก็ยิงออเดอร์ปลอมได้) · พนักงานแก้ `order_items` ได้เฉพาะ `status`, `cancelled_by`, `cancelled_reason`, `cancelled_at` | migration 028 · ลูกค้ายังสแกน QR สั่งได้เหมือนเดิม (ไม่ต้องล็อกอิน) — ที่ปิดคือ "ทางลัดที่ไม่ผ่าน QR" · **หน้าลูกค้า (T-05) ต้องตรวจ QR token ที่เซิร์ฟเวอร์ก่อนอ่าน/บันทึกออเดอร์ทุกครั้ง** (ขั้นตอนตาม SEED.md ข้อ 5) เลือกได้ 2 วิธี: (A) ฟังก์ชัน SQL แบบ SECURITY DEFINER ที่รับ token แล้วตรวจเอง (แนะนำ เหมือนฟังก์ชันเปิดโต๊ะ/ออกบิล) หรือ (B) Server Action ตรวจ token จาก cookie แล้วบันทึกด้วย `createAdminClient()` · ห้ามเปิด policy ให้ anon อ่าน/เพิ่มตรงกลับมา |
 | **ตารางที่สำรองไว้ ยังไม่ใช้ในเฟส 1** (26 พ.ย. 2026) | `usage_rates`, `head_usage_estimates` (ไม่มีระบบพยากรณ์) · `package_menu_items` (บุฟเฟต์ราคาเดียว ใช้ `extra_price` แยกเมนูสั่งเพิ่มแทน) · `payment_attempts` (ส่วนคิดเงิน) | มีโครงตารางและข้อมูลตัวอย่าง แต่ไม่มีหน้าจอ/ไม่มี FR — อย่าสร้างหน้าจอเองก่อนถามผู้ใช้ · ตัวเลือกเมนู (`menu_item_options`) ยังไม่มีหน้าจัดการ แก้ผ่าน SQL และราคาตัวเลือกยังไม่ถูกรวมในบิล (ทุกตัวเลือกตั้งราคา 0) |
 | **บัญชีพนักงาน** (25 พ.ย. 2026) | Admin สร้างบัญชีจากหน้าเว็บได้ · ปิดใช้งานแทนการลบ · Admin เปลี่ยนตำแหน่ง/ปิดบัญชีตัวเองไม่ได้ | ใช้ Service Role Key ฝั่งเซิร์ฟเวอร์เท่านั้น · ไม่มี key = ดูรายชื่อได้อย่างเดียว · Audit `CREATE_STAFF` / `UPDATE_STAFF` ไม่เก็บรหัสผ่าน/PIN · **ล็อกอินด้วย PIN ยังไม่ได้ทำ** (หน้า login รองรับแค่อีเมล) |
+| **ลูกค้าสั่งอาหาร** (25 พ.ย. 2026) | ลูกค้าเข้าถึงข้อมูลผ่านฟังก์ชันที่รับ hash ของ QR token เท่านั้น · เมนูมีตัวเลือกให้เลือกกลุ่มละ 1 ก่อนใส่ตะกร้า · เมนูสั่งเพิ่มแสดงป้าย "สั่งเพิ่ม +ราคา" · ยังไม่บังคับ `max_quantity_per_order` (ดูแถว "จำกัดจำนวนสั่ง") | migration 029 — token อยู่ใน cookie httpOnly `kuro_order_token` (proxy ตั้งตอนสแกนแล้วลบ `?t=` จาก URL) · `fn_customer_place_order` ตรวจ `expires_at`, เมนู `available`, ตัวเลือกครบ · `unit_price_snapshot` = `extra_price` + ราคาตัวเลือก · anon อ่าน/เขียน `orders` `order_items` ตรงไม่ได้แล้ว |

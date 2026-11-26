@@ -211,3 +211,11 @@ export const ROLE_LABELS = {
 };
 
 
+
+/**
+ * หน้าลูกค้า (ไม่ล็อกอิน) — cookie เก็บ QR token ของโต๊ะ (httpOnly, ตั้งโดย src/proxy.js)
+ * QR พาไป /order/T01?t=<token> → proxy เก็บ token ใน cookie นี้แล้วพาไป /order/T01 (แถบ URL ไม่มี token)
+ * หน้าย่อย /status, /call-staff, /summary อ่าน token จาก cookie เดียวกัน
+ */
+export const CUSTOMER_TOKEN_COOKIE = 'kuro_order_token';
+export const CUSTOMER_TOKEN_MAX_AGE_SECONDS = 12 * 60 * 60; // 12 ชั่วโมง (token จริงหมดอายุตอนปิดรอบ)
