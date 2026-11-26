@@ -388,9 +388,13 @@ export const calcBuffetTotal = (session) =>
 | Channel | ใช้ใน | Event ที่ Subscribe |
 |---|---|---|
 | `table-status` | ผังโต๊ะ, ลูกค้า | `UPDATE` บน `dining_tables` |
-| `order-items:{sessionId}` | หน้าลูกค้า + KDS | `INSERT/UPDATE` บน `order_items` |
-| `queue-updates` | หน้าคิวลูกค้า + พนักงาน | `UPDATE` บน `queues` |
-| `service-requests` | พนักงาน + ลูกค้า | `INSERT/UPDATE` บน `service_requests` |
+| `order-items:{sessionId}` | KDS | `INSERT/UPDATE` บน `order_items` |
+| `queue-updates` | หน้าคิวพนักงาน | `UPDATE` บน `queues` |
+| `service-requests` | พนักงาน | `INSERT/UPDATE` บน `service_requests` |
+| `customer-menu-availability` | หน้าสั่งอาหารลูกค้า | `UPDATE` บน `menu_items` (ป้าย "หมด") |
+
+> [!NOTE]
+> ตั้งแต่ migration 025–028 ลูกค้า (anon) อ่าน `order_items` / `service_requests` / `queues` ตรงไม่ได้ (RLS) จึงรับ Realtime ของตารางเหล่านี้ไม่ได้ — หน้าลูกค้าดึงผ่านฟังก์ชัน `fn_customer_*` ซ้ำเป็นระยะด้วย `usePeriodicRefresh` แทน: สถานะอาหาร / เรียกพนักงาน ทุก 10 วินาที, ดูคิว ทุก 5 วินาที
 | `kitchen-all-stations` / `kitchen-station-{station}` | จอครัว, หน้าเปิด/ปิดเมนู | `*` บน `order_items`, `UPDATE` บน `menu_items` |
 | `stock-updates` | หน้าสต็อก `/inventory` (Manager/Admin) | `INSERT` บน `stock_movements`, `*` บน `stock_counts` (รวมสัญญาณที่มาติดกันเป็นโหลดครั้งเดียว 800ms) |
 
