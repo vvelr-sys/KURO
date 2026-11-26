@@ -69,6 +69,20 @@ export default function BomEditor({ loadAction, saveAction }) {
 
   const selectedMenu = menus.find((menu) => menu.id === selectedMenuId) ?? null;
 
+  // สูตรที่บันทึกไว้ของเมนูที่เลือก → เทียบกับที่แก้อยู่ เพื่อบอกว่า "ยังไม่บันทึก"
+  const hasUnsavedChanges = useMemo(() => {
+    if (!selectedMenuId) return false;
+    const toKey = (list) =>
+      list
+        .map((row) => `${row.ingredientId}:${Number(row.quantity)}`)
+        .sort()
+        .join('|');
+    const savedRows = bomRows
+      .filter((row) => row.menu_item_id === selectedMenuId)
+      .map((row) => ({ ingredientId: row.ingredient_id, quantity: row.quantity_required }));
+    return toKey(savedRows) !== toKey(draftRows);
+  }, [bomRows, draftRows, selectedMenuId]);
+
   const selectMenu = (menuId) => {
     setSelectedMenuId(menuId);
     setNotice(null);
@@ -123,9 +137,9 @@ export default function BomEditor({ loadAction, saveAction }) {
   if (isLoading) return <div className="h-64 animate-pulse rounded-3xl bg-white" aria-hidden />;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
-      {/* ─── รายการเมนู ─── */}
-      <section className="flex flex-col gap-3 rounded-3xl bg-white p-4 shadow-sm">
+    <div className="grid items-start gap-4 lg:grid-cols-[20rem_1fr]">
+      {/* ─── รายการเมนู (ติดอยู่กับที่ตอนเลื่อนหน้า) ─── */}
+      <section className="flex flex-col gap-3 rounded-3xl bg-white p-4 shadow-sm lg:sticky lg:top-24">
         <label className="relative">
           <span className="sr-only">ค้นหาเมนู</span>
           <Search className="absolute left-3.5 top-1/2 size-5 -translate-y-1/2 text-ink-muted" aria-hidden />
@@ -137,7 +151,8 @@ export default function BomEditor({ loadAction, saveAction }) {
             onChange={(e) => setSearchText(e.target.value)}
           />
         </label>
-        <ul className="flex max-h-[60vh] flex-col gap-1 overflow-y-auto">
+        <p className="px-1 text-sm text-ink-muted">{visibleMenus.length} เมนู</p>
+        <ul className="-mx-1 flex max-h-[60vh] flex-col gap-1 overflow-y-auto px-1">
           {visibleMenus.map((menu) => {
             const isSelected = menu.id === selectedMenuId;
             const bomCount = bomCountByMenu.get(menu.id) ?? 0;
@@ -152,7 +167,12 @@ export default function BomEditor({ loadAction, saveAction }) {
                     isSelected ? 'bg-primary text-white' : 'hover:bg-surface'
                   )}
                 >
-                  <span className="min-w-0 flex-1 truncate font-semibold">{menu.name}</span>
+                  <span className="min-w-0 flex-1 leading-tight">
+                    <span className="block truncate font-semibold">{menu.name}</span>
+                    {menu.categories?.name && (
+                      <span className={cn('block truncate text-xs', isSelected ? 'text-white/75' : 'text-ink-muted')}>{menu.categories.name}</span>
+                    )}
+                  </span>
                   <span
                     className={cn(
                       'shrink-0 rounded-full px-2 py-0.5 text-xs font-bold',
@@ -174,19 +194,34 @@ export default function BomEditor({ loadAction, saveAction }) {
           <p className="p-10 text-center text-ink-muted">เลือกเมนูทางซ้ายเพื่อดู/แก้สูตรตัดสต็อก</p>
         ) : (
           <>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex-1">
+            <div className="flex flex-wrap items-start gap-3 border-b border-line pb-4">
+              <div className="min-w-0 flex-1">
                 <h2 className="text-xl font-bold">{selectedMenu.name}</h2>
-                <p className="text-sm text-ink-muted">ปริมาณวัตถุดิบที่ใช้ต่อ 1 จาน · ระบบตัดสต็อกตามนี้เมื่อครัวกดเริ่มทำ</p>
+                <p className="text-sm text-ink-muted">
+                  {selectedMenu.categories?.name && `${selectedMenu.categories.name} · `}ปริมาณวัตถุดิบที่ใช้ต่อ 1 จาน · ระบบตัดสต็อกตามนี้เมื่อครัวกดเริ่มทำ
+                </p>
               </div>
-              <span
-                className={cn(
-                  'rounded-full px-3 py-1 text-sm font-bold',
-                  AVAILABILITY_DISPLAY[selectedMenu.availability_status]?.className
+              <div className="flex flex-wrap items-center gap-2">
+                {portionsAvailable !== null && (
+                  <span
+                    className={cn(
+                      'rounded-full px-3 py-1 text-sm font-bold tabular-nums',
+                      portionsAvailable < 1 ? 'bg-danger-soft text-danger' : 'bg-surface text-ink'
+                    )}
+                    title="คำนวณจากวัตถุดิบที่เหลือน้อยที่สุดในสูตร"
+                  >
+                    ทำได้ ~{formatStockNumber(portionsAvailable)} จาน
+                  </span>
                 )}
-              >
-                {AVAILABILITY_DISPLAY[selectedMenu.availability_status]?.label}
-              </span>
+                <span
+                  className={cn(
+                    'rounded-full px-3 py-1 text-sm font-bold',
+                    AVAILABILITY_DISPLAY[selectedMenu.availability_status]?.className
+                  )}
+                >
+                  {AVAILABILITY_DISPLAY[selectedMenu.availability_status]?.label}
+                </span>
+              </div>
             </div>
 
             {draftRows.length === 0 ? (
@@ -194,65 +229,94 @@ export default function BomEditor({ loadAction, saveAction }) {
                 เมนูนี้ยังไม่มีสูตร — ครัวกดทำแล้วจะไม่ตัดสต็อก
               </p>
             ) : (
-              <ul className="flex flex-col gap-2">
-                {draftRows.map((row) => {
-                  const ingredient = ingredientById.get(row.ingredientId);
-                  return (
-                    <li key={row.key} className="flex flex-wrap items-center gap-2 rounded-2xl bg-surface p-2">
-                      <select
-                        aria-label="วัตถุดิบ"
-                        value={row.ingredientId}
-                        onChange={(e) => updateDraftRow(row.key, 'ingredientId', e.target.value)}
-                        className="h-11 min-w-48 flex-1 rounded-xl border border-line bg-white px-3 outline-none focus:border-primary"
+              <div className="flex flex-col gap-2">
+                {/* หัวคอลัมน์ (จอกว้าง) */}
+                <div className="hidden grid-cols-[minmax(0,1fr)_10rem_9rem_2.5rem] gap-3 px-3 text-xs font-semibold text-ink-muted md:grid">
+                  <span>วัตถุดิบ</span>
+                  <span className="text-right">ใช้ต่อจาน</span>
+                  <span className="text-right">คงเหลือ / ทำได้</span>
+                  <span />
+                </div>
+                <ul className="flex flex-col gap-2">
+                  {draftRows.map((row) => {
+                    const ingredient = ingredientById.get(row.ingredientId);
+                    const quantity = Number(row.quantity);
+                    // วัตถุดิบตัวนี้ตัวเดียวพอทำกี่จาน
+                    const portionsFromThis = ingredient && quantity > 0 ? Math.floor(Number(ingredient.current_stock) / quantity) : null;
+                    return (
+                      <li
+                        key={row.key}
+                        className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-2xl bg-surface p-2 md:grid-cols-[minmax(0,1fr)_10rem_9rem_2.5rem] md:gap-3"
                       >
-                        <option value="">— เลือกวัตถุดิบ —</option>
-                        {ingredients.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name} ({item.unit})
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        aria-label="ปริมาณต่อจาน"
-                        inputMode="decimal"
-                        value={row.quantity}
-                        onChange={(e) => updateDraftRow(row.key, 'quantity', e.target.value)}
-                        className="h-11 w-28 rounded-xl border border-line bg-white px-3 text-right tabular-nums outline-none focus:border-primary"
-                        placeholder="0"
-                      />
-                      <span className="w-14 text-sm text-ink-muted">{ingredient?.unit ?? ''}/จาน</span>
-                      <span className="hidden text-xs text-ink-muted sm:inline">
-                        {ingredient && `คงเหลือ ${formatStockNumber(ingredient.current_stock)}`}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeDraftRow(row.key)}
-                        className="ml-auto flex size-9 items-center justify-center rounded-full text-ink-muted hover:bg-danger-soft hover:text-danger"
-                        aria-label="ลบแถวนี้"
-                      >
-                        <Trash2 className="size-4" aria-hidden />
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+                        <select
+                          aria-label="วัตถุดิบ"
+                          value={row.ingredientId}
+                          onChange={(e) => updateDraftRow(row.key, 'ingredientId', e.target.value)}
+                          className="col-span-2 h-11 w-full rounded-xl border border-line bg-white px-3 outline-none focus:border-primary md:col-span-1"
+                        >
+                          <option value="">— เลือกวัตถุดิบ —</option>
+                          {ingredients.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name} ({item.unit})
+                            </option>
+                          ))}
+                        </select>
+                        <label className="flex items-center gap-2">
+                          <input
+                            aria-label="ปริมาณต่อจาน"
+                            inputMode="decimal"
+                            value={row.quantity}
+                            onChange={(e) => updateDraftRow(row.key, 'quantity', e.target.value)}
+                            className="h-11 w-full min-w-0 rounded-xl border border-line bg-white px-3 text-right tabular-nums outline-none focus:border-primary"
+                            placeholder="0"
+                          />
+                          <span className="w-10 shrink-0 text-sm text-ink-muted">{ingredient?.unit ?? ''}</span>
+                        </label>
+                        <p className="text-right text-sm leading-tight tabular-nums">
+                          {ingredient ? (
+                            <>
+                              <span className="block text-ink-muted">
+                                เหลือ {formatStockNumber(ingredient.current_stock)} {ingredient.unit}
+                              </span>
+                              {portionsFromThis !== null && (
+                                <span className={cn('block font-semibold', portionsFromThis < 1 ? 'text-danger' : 'text-ink')}>
+                                  ทำได้ {formatStockNumber(portionsFromThis)} จาน
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-ink-muted">—</span>
+                          )}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => removeDraftRow(row.key)}
+                          className="flex size-10 items-center justify-center justify-self-end rounded-full text-ink-muted hover:bg-danger-soft hover:text-danger"
+                          aria-label="ลบแถวนี้"
+                          title="ลบแถวนี้"
+                        >
+                          <Trash2 className="size-4" aria-hidden />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             )}
 
-            {portionsAvailable !== null && (
-              <p className={cn('text-sm font-semibold', portionsAvailable < 1 ? 'text-danger' : 'text-ink-muted')}>
-                สต็อกตอนนี้ทำได้ประมาณ {formatStockNumber(portionsAvailable)} จาน
-                {portionsAvailable < 1 && ' — เมนูจะแสดง "หมด" ให้ลูกค้าอัตโนมัติ'}
-              </p>
+            {portionsAvailable !== null && portionsAvailable < 1 && (
+              <p className="text-sm font-semibold text-danger">วัตถุดิบไม่พอทำ 1 จาน — เมนูจะแสดง &ldquo;หมด&rdquo; ให้ลูกค้าอัตโนมัติ</p>
             )}
 
             <AlertMessage>{pageError}</AlertMessage>
             <AlertMessage tone="success">{notice}</AlertMessage>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
               <Button variant="secondary" icon={Plus} onClick={addDraftRow}>
                 เพิ่มวัตถุดิบ
               </Button>
-              <Button icon={Save} className="ml-auto" isLoading={isSaving} onClick={handleSave}>
+              {hasUnsavedChanges && <span className="ml-auto rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-900">ยังไม่บันทึก</span>}
+              <Button icon={Save} className={cn(!hasUnsavedChanges && 'ml-auto')} isLoading={isSaving} disabled={!hasUnsavedChanges} onClick={handleSave}>
                 บันทึกสูตร
               </Button>
             </div>

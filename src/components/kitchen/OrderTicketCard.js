@@ -28,13 +28,15 @@ const NEXT_STATUS = {
 const DISH_SORT_ORDER = { cooking: 0, pending: 1, served: 2 };
 
 /**
- * จัดรูปแบบเวลาเป็น นาที:วินาที เช่น 05:30
+ * จัดรูปแบบเวลารอ: ไม่ถึง 1 ชั่วโมง = นาที:วินาที (05:30) · ตั้งแต่ 1 ชั่วโมง = ชั่วโมง:นาที:วินาที (1:05:30)
  * @param {number} totalSeconds
  */
 function formatWaitTime(totalSeconds) {
-  const minutes = Math.floor(totalSeconds / 60);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  const minutesAndSeconds = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  return hours > 0 ? `${hours}:${minutesAndSeconds}` : minutesAndSeconds;
 }
 
 /**

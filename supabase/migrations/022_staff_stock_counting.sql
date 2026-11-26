@@ -55,7 +55,10 @@ $$ LANGUAGE sql STABLE;
 -- ------------------------------------------------------------
 -- 3) รายการวัตถุดิบสำหรับหน้านับ — ส่งเฉพาะชื่อและหน่วย (ไม่ส่งยอดคงเหลือ)
 -- ------------------------------------------------------------
-CREATE OR REPLACE FUNCTION fn_ingredients_for_count()
+-- DROP ก่อน: ฐานข้อมูลที่รัน 026/028 ไปแล้วมีเวอร์ชันที่คืน image_url ด้วย (ชนิดผลลัพธ์ต่างกัน
+-- CREATE OR REPLACE จะ error "cannot change return type") — รัน 026, 028 ต่อจะได้เวอร์ชันล่าสุดกลับมา
+DROP FUNCTION IF EXISTS fn_ingredients_for_count();
+CREATE FUNCTION fn_ingredients_for_count()
 RETURNS TABLE (id UUID, name VARCHAR, unit VARCHAR) AS $$
 BEGIN
     IF fn_my_role() IS NULL OR fn_my_role() NOT IN ('staff', 'manager', 'admin') THEN

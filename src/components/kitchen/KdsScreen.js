@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useSyncExternalStore } from 
 import {
   AlarmClock,
   BellRing,
+  ChefHat,
   CircleHelp,
   Flame,
   Inbox,
@@ -214,7 +215,7 @@ export default function KdsScreen() {
             className="flex h-11 items-center gap-2 rounded-full bg-white px-4 font-semibold shadow-sm hover:bg-surface"
           >
             {soundEnabled ? <Volume2 className="size-5" aria-hidden /> : <VolumeX className="size-5" aria-hidden />}
-            เสียงเตือนออเดอร์ใหม่: {soundEnabled ? 'เปิด' : 'ปิด'}
+            เสียงเตือน: {soundEnabled ? 'เปิด' : 'ปิด'}
           </button>
           <button
             type="button"
@@ -240,19 +241,17 @@ export default function KdsScreen() {
         </div>
       )}
 
-      {/* ═══ การ์ดสรุป ═══ */}
+      {/* ═══ การ์ดสรุป (เตี้ย ให้พื้นที่การ์ดออเดอร์มากที่สุด) ═══ */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {summaryCards.map(({ label, value, icon: Icon, iconClass, highlight }) => (
-          <div key={label} className={cn('flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm', highlight && 'ring-2 ring-danger')}>
-            <span className={cn('flex size-12 shrink-0 items-center justify-center rounded-xl', iconClass)}>
-              <Icon className="size-6" aria-hidden />
+          <div key={label} className={cn('flex items-center gap-3 rounded-2xl bg-white px-4 py-2.5 shadow-sm', highlight && 'ring-2 ring-danger')}>
+            <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl', iconClass)}>
+              <Icon className="size-5" aria-hidden />
             </span>
-            <div className="leading-tight">
-              <p className="text-sm text-ink-muted">{label}</p>
-              <p className="text-2xl font-bold">
-                {value} <span className="text-sm font-normal text-ink-muted">จาน</span>
-              </p>
-            </div>
+            <p className="flex-1 text-sm font-semibold text-ink-muted">{label}</p>
+            <p className="text-2xl font-bold tabular-nums">
+              {value} <span className="text-sm font-normal text-ink-muted">จาน</span>
+            </p>
           </div>
         ))}
       </div>
@@ -294,9 +293,15 @@ export default function KdsScreen() {
           </Button>
         </div>
       ) : orders.length === 0 ? (
-        <p className="rounded-3xl bg-white p-10 text-center text-ink-muted">ตอนนี้ไม่มีออเดอร์ที่ต้องทำ</p>
+        <div className="flex flex-col items-center gap-2 rounded-3xl bg-white p-12 text-center shadow-sm">
+          <span className="flex size-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-800">
+            <ChefHat className="size-8" aria-hidden />
+          </span>
+          <p className="text-lg font-bold">ไม่มีออเดอร์ค้าง</p>
+          <p className="text-ink-muted">{selectedStation ? 'สถานีนี้ทำครบแล้ว' : 'ทุกสถานีทำครบแล้ว'} — ออเดอร์ใหม่จะขึ้นที่นี่พร้อมเสียงเตือน</p>
+        </div>
       ) : viewMode === 'ticket' ? (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {orders.map((order) => (
             <OrderTicketCard
               key={order.order_id}
