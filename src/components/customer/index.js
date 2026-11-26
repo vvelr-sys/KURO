@@ -9,5 +9,6 @@ export { default as CustomerTabs } from './CustomerTabs';
 export { default as StatusScreen } from './StatusScreen';
 export { default as CallStaffScreen } from './CallStaffScreen';
 export { default as SummaryScreen } from './SummaryScreen';
+export { default as QueueScreen } from './QueueScreen';
 export { default as OrderRoundCard, CUSTOMER_ITEM_STATUS } from './OrderRoundCard';
 export { makeCartKey, changeCartQuantity, mergeCarts, countByMenuItem, formatExtraPrice } from './cart';

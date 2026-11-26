@@ -28,6 +28,7 @@
 | [`supabase/migrations/025_customer_ordering.sql`](../supabase/migrations/025_customer_ordering.sql) | หน้าสั่งอาหารลูกค้า: ปิด RLS ที่ให้ anon เขียน/อ่าน `orders` `order_items` ตรง, ฟังก์ชัน `fn_customer_get_session` / `fn_customer_get_menu` / `fn_customer_place_order` (anon เรียกได้ ต้องส่ง hash ของ QR token), พนักงานอ่านตัวเลือกเมนูได้ (จอครัวแสดงตัวเลือก) | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
 | [`supabase/migrations/026_customer_order_status.sql`](../supabase/migrations/026_customer_order_status.sql) | หน้าสถานะอาหารลูกค้า: `fn_customer_get_orders` อ่านออเดอร์โต๊ะตัวเองผ่าน QR token (ไม่มีราคา/เหตุผลยกเลิก) | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
 | [`supabase/migrations/027_customer_service_requests.sql`](../supabase/migrations/027_customer_service_requests.sql) | หน้าเรียกพนักงานลูกค้า: ปิด RLS ที่ให้ anon เขียน/อ่าน `service_requests` ตรง, `fn_customer_get_service_requests` / `fn_customer_create_service_request` (กันกดซ้ำ: ประเภทเดิมที่ยังไม่เสร็จไม่สร้างใหม่) | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
+| [`supabase/migrations/028_customer_queue_view.sql`](../supabase/migrations/028_customer_queue_view.sql) | หน้าดูคิวลูกค้า: ปิด RLS ที่ให้ anon อ่าน `queues` ทุกแถว (รวมเบอร์โทร), `fn_customer_get_queue` คืนบัตรคิว + คิวก่อนหน้า + คิวที่กำลังเรียก (ไม่มีเบอร์โทร) | ✅ รันซ้ำได้ ไม่แก้ข้อมูล |
 | [`supabase/seed_master.sql`](../supabase/seed_master.sql) | ข้อมูลหลัก: ตั้งค่า VAT/ค่าปรับ, แพ็กเกจ, โต๊ะ T01-T08, หมวด, วัตถุดิบ, เมนู, ตัวเลือก, BOM, อัตราใช้ต่อหัว | ✅ รันซ้ำ = รีเซ็ตข้อมูลหลักกลับค่าตั้งต้น (ยกเว้นสถานะโต๊ะ) |
 | [`supabase/seed_demo.sql`](../supabase/seed_demo.sql) | ล้างข้อมูลการใช้งาน แล้วใส่ข้อมูลจำลอง (คิว, 3 โต๊ะกำลังใช้งาน, ออเดอร์, บิล, ประวัติ 7 วัน ฯลฯ) | ✅ ทั้งไฟล์อยู่ใน Transaction เดียว ผิดพลาดตรงไหน ROLLBACK ทั้งหมด |
 
@@ -37,7 +38,7 @@
 
 | ลำดับ | ทำอะไร | ที่ไหน |
 |:---:|---|---|
-| 0 | `supabase/migrations/002_v18_fixes.sql` → `003_queue_guests_tax_invoice.sql` → `004_protect_profiles.sql` → `005_table_session_functions.sql` → `006_queue_functions.sql` → `007_billing_functions.sql` → `008_settings_receipt_messages.sql` → `020_kitchen_cancel_return_and_audit.sql` → `021_fix_cancel_return_actor.sql` → `022_staff_stock_counting.sql` → `023_kitchen_read_sessions.sql` → `024_inventory_reports_audit.sql` → `025_customer_ordering.sql` → `026_customer_order_status.sql` → `027_customer_service_requests.sql` (แก้ schema ครั้งเดียว หลัง `001_initial_schema.sql`) | SQL Editor |
+| 0 | `supabase/migrations/002_v18_fixes.sql` → `003_queue_guests_tax_invoice.sql` → `004_protect_profiles.sql` → `005_table_session_functions.sql` → `006_queue_functions.sql` → `007_billing_functions.sql` → `008_settings_receipt_messages.sql` → `020_kitchen_cancel_return_and_audit.sql` → `021_fix_cancel_return_actor.sql` → `022_staff_stock_counting.sql` → `023_kitchen_read_sessions.sql` → `024_inventory_reports_audit.sql` → `025_customer_ordering.sql` → `026_customer_order_status.sql` → `027_customer_service_requests.sql` → `028_customer_queue_view.sql` (แก้ schema ครั้งเดียว หลัง `001_initial_schema.sql`) | SQL Editor |
 | 1 | สร้างบัญชีทดสอบ 5 ตำแหน่ง — เลือก **วิธี A** หรือ **วิธี B** ด้านล่าง | Dashboard / Terminal |
 | 2 | `supabase/seed_master.sql` | SQL Editor |
 | 3 | `supabase/seed_demo.sql` (เฉพาะฐานข้อมูลพัฒนา/ทดสอบ) | SQL Editor |
@@ -131,6 +132,7 @@ union all select 'audit_logs', count(*) from audit_logs;
 - งานโต๊ะ/รอบบริการ **ต้องเรียกผ่านฟังก์ชัน** `supabase.rpc('fn_open_table' | 'fn_move_table' | 'fn_mark_table_cleaned' | 'fn_set_table_disabled' | 'fn_start_closing' | 'fn_record_leftover' | 'fn_issue_qr_token', …)` ห้ามแก้ตาราง `sessions` / `session_tables` / `dining_tables` ตรงๆ — ฟังก์ชันตรวจตำแหน่งและทำทุกขั้นใน Transaction เดียว (error เป็นภาษาไทย แสดงบนหน้าจอได้เลย)
 - บันทึก `audit_logs` ได้เฉพาะในนามตัวเอง (`actor_id` = ผู้ล็อกอิน) และ **ห้ามต่อ `.select()`** หลัง insert (พนักงานทั่วไปอ่าน log ไม่ได้ จะ error)
 - งานคิวเรียกผ่าน `supabase.rpc('fn_issue_queue' | 'fn_update_queue_status', …)` — เลขคิวสร้างในฐานข้อมูล ห้าม insert ตาราง `queues` เอง
+- หน้าดูคิวของลูกค้า `/queue/[queueId]` อ่านผ่าน `supabase.rpc('fn_customer_get_queue', { p_queue_id })` เท่านั้น — migration 028 ปิดไม่ให้ anon อ่าน `queues` ตรง (พนักงานที่ล็อกอินอ่านได้ตามเดิม) · ลูกค้าจึงรับ Realtime ของ `queues` ไม่ได้ หน้าดึงซ้ำทุก 5 วินาทีแทน
 - งานสต็อกของ Staff เรียกผ่าน `supabase.rpc('fn_ingredients_for_count' | 'fn_today_stock_count_rounds' | 'fn_submit_stock_count' | 'fn_record_stock_movement', …)` และ Manager อนุมัติผ่าน `fn_review_stock_count` — **ห้ามให้หน้า Staff อ่าน `ingredients.current_stock` / `stock_count_items.system_stock`** (นับแบบไม่เห็นยอด)
 - ยกเลิกรายการอาหาร: แค่อัปเดต `order_items.status = 'cancelled'` พร้อม `cancelled_by`, `cancelled_reason` — Trigger คืนสต็อกให้เอง ห้ามแก้ `ingredients` / `stock_movements` ใน Server Action
 - คิดเงินเรียกผ่าน `supabase.rpc('fn_create_bill' | 'fn_apply_discount' | 'fn_pay_bill', …)` — ยอดเงินทั้งหมดคำนวณในฐานข้อมูล ห้าม insert/update `bills` `bill_items` `payments` เอง
